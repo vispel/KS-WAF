@@ -7,6 +7,7 @@ import com.ks.exceptions.AttackLoggingException;
 import com.ks.exceptions.FilterConfigurationException;
 import com.ks.utils.ConfigurationUtils;
 import com.ks.utils.ParamConsts;
+import org.apache.commons.lang3.StringUtils;
 
 import javax.servlet.FilterConfig;
 import java.io.File;
@@ -19,7 +20,8 @@ public final class DefaultAttackLogger implements AttackLogger {
 	public static final String LEGACY_PARAM_COUNT = "PreAndPostAttackLogCount";
 
 
-	private String directory = ""; // this default (empty) means here: no file logging (use inherited logger)
+	private String directory = "";
+	private String DEFAULT_LOGGER_DIRECTORY = "/ks-waf/logs/";
 	private int prePostCount = 0; // 0 = disabled = the fastest setting (pre/post count)
 
 	private Logger securityLogger;
@@ -35,13 +37,11 @@ public final class DefaultAttackLogger implements AttackLogger {
 		final ConfigurationManager configManager = ConfigurationUtils.createConfigurationManager(filterConfig);
 		{
 			String value = ConfigurationUtils.extractMandatoryConfigValue(configManager,PARAM_DIRECTORY);
-			if (value == null) value = configManager.getConfigurationValue(LEGACY_PARAM_DIRECTORY);
-			if (value == null) value = "";
+			if (value == null) value = DEFAULT_LOGGER_DIRECTORY;
 			this.directory = value.trim();
 		}
 		{
 			String value = configManager.getConfigurationValue(PARAM_COUNT);
-			if (value == null) value = configManager.getConfigurationValue(LEGACY_PARAM_COUNT);
 			if (value == null) value = "0";
 			try {
 				this.prePostCount = Integer.parseInt(value.trim());
@@ -57,43 +57,47 @@ public final class DefaultAttackLogger implements AttackLogger {
 	@Override
 	public void init(final String application, final boolean logVerboseForDevelopmentMode) {
 		this.securityLogger =  Logger.getLogger("KsWaf-Security."+application);
-		// check if we should simply use no custom file logging for attacks; simply use the regular logger without any file handler
-		if (directory != null && directory.trim().length() != 0) {
-			// create file logging
-			final File rootDirectory = new File(directory);
-			final String applicationAdjusted;
-			if (application == null || application.trim().length() == 0) {
-				applicationAdjusted = "";
-				System.out.println("KsWaf logs attacks for this application to "+rootDirectory.getAbsolutePath());
+		if(StringUtils.isEmpty(this.directory)){
+			this.directory = DEFAULT_LOGGER_DIRECTORY;
+		}
+		// create file logging
+		final File file = new File(directory);
+		file.mkdirs();
+		if (!file.exists()) file.mkdirs(); System.out.println("KS-WAF log directory was created: "+file.getAbsolutePath());
+		if (!file.exists()) System.out.println("KS-WAF log directory doesn't exist: "+file.getAbsolutePath());
+		final String applicationAdjusted;
+		if (application == null || application.trim().length() == 0) {
+			applicationAdjusted = "";
+			System.out.println("KS-WAF logs attacks for this application to "+file.getAbsolutePath());
+		} else {
+			System.out.println("KS-WAF logs attacks for application "+application.trim()+" to "+file.getAbsolutePath());
+			applicationAdjusted = "."+application.trim();
+		}
+		directory = AttackHandler.getAbsolutePathLoggingSafe(file);
+		try {
+			// be secure and avoid logging security stuff at any other locations (i.e. parent loggers) too when logging in custom file
+			this.securityLogger.setUseParentHandlers(false);
+			fileHandlerPointerForSecurityLogging = new FileHandler(directory+"/ks-waf-Security"+applicationAdjusted+"-%g-%u.log", 1024*1024*5, 20, false);
+			this.fileHandlerPointerForSecurityLogging.setEncoding(ParamConsts.DEFAULT_CHARACTER_ENCODING);
+			final Formatter formatter = new SimpleFormatter();
+			fileHandlerPointerForSecurityLogging.setFormatter(formatter);
+			if (logVerboseForDevelopmentMode) {
+				this.handlerForSecurityLogging = fileHandlerPointerForSecurityLogging; //= use without MemoryHandler wrapper
+				// set logger level to fine to be verbose
+				securityLogger.setLevel(Level.FINE);
 			} else {
-				System.out.println("KsWaf logs attacks for application "+application.trim()+" to "+rootDirectory.getAbsolutePath());
-				applicationAdjusted = "."+application.trim();
+				// filter through memory-handler when defined
+				if (this.prePostCount > 0) {
+					this.memoryHandlerPointerForSecurityLogging = new MemoryHandler(fileHandlerPointerForSecurityLogging, prePostCount+1, Level.WARNING); // +1 since the attack itself is also counted
+					this.memoryHandlerPointerForSecurityLogging.setEncoding(ParamConsts.DEFAULT_CHARACTER_ENCODING);
+					this.handlerForSecurityLogging = this.memoryHandlerPointerForSecurityLogging;
+					securityLogger.setLevel(Level.FINE); // to have the FINE logged pre-attack requests being written to the file on an attack
+				} else this.handlerForSecurityLogging = fileHandlerPointerForSecurityLogging; //= use without MemoryHandler wrapper
 			}
-			directory = AttackHandler.getAbsolutePathLoggingSafe(rootDirectory);
-			try {
-				// be secure and avoid logging security stuff at any other locations (i.e. parent loggers) too when logging in custom file
-				this.securityLogger.setUseParentHandlers(false);
-				fileHandlerPointerForSecurityLogging = new FileHandler(directory+"/KsWaf-Security"+applicationAdjusted+"-%g-%u.log", 1024*1024*5, 20, false);
-				this.fileHandlerPointerForSecurityLogging.setEncoding(ParamConsts.DEFAULT_CHARACTER_ENCODING);
-				final Formatter formatter = new SimpleFormatter();
-				fileHandlerPointerForSecurityLogging.setFormatter(formatter);
-				if (logVerboseForDevelopmentMode) {
-					this.handlerForSecurityLogging = fileHandlerPointerForSecurityLogging; //= use without MemoryHandler wrapper
-					// set logger level to fine to be verbose
-					securityLogger.setLevel(Level.FINE);
-				} else {
-					// filter through memory-handler when defined
-					if (this.prePostCount > 0) {
-						this.memoryHandlerPointerForSecurityLogging = new MemoryHandler(fileHandlerPointerForSecurityLogging, prePostCount+1, Level.WARNING); // +1 since the attack itself is also counted
-						this.memoryHandlerPointerForSecurityLogging.setEncoding(ParamConsts.DEFAULT_CHARACTER_ENCODING);
-						this.handlerForSecurityLogging = this.memoryHandlerPointerForSecurityLogging;
-						securityLogger.setLevel(Level.FINE); // to have the FINE logged pre-attack requests being written to the file on an attack
-					} else this.handlerForSecurityLogging = fileHandlerPointerForSecurityLogging; //= use without MemoryHandler wrapper
-				}
-				securityLogger.addHandler(this.handlerForSecurityLogging);
-			} catch (Exception e) {
-				System.err.println("Unable to initialize security logging: "+e.getMessage());
-			}
+			securityLogger.addHandler(this.handlerForSecurityLogging);
+		} catch (Exception e) {
+			System.err.println("Unable to initialize security logging: "+ e.getMessage());
+			e.printStackTrace();
 		}
 	}
 

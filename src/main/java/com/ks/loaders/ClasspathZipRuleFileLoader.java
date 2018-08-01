@@ -10,10 +10,12 @@ import org.apache.commons.lang3.StringUtils;
 
 import javax.servlet.FilterConfig;
 import java.io.*;
+import java.net.URISyntaxException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
+import java.util.Enumeration;
 import java.util.List;
 import java.util.Properties;
 import java.util.stream.Stream;
@@ -22,7 +24,7 @@ import java.util.zip.ZipFile;
 import java.util.zip.ZipInputStream;
 
 public class ClasspathZipRuleFileLoader extends AbstractFilebasedRuleFileLoader implements RuleFileLoader {
-	private String classpathReference = "rules.zip";
+	private String classpathReference = "com/ks/rules.zip";
 
 	public void setFilterConfig(FilterConfig filterConfig)
 			throws FilterConfigurationException
@@ -38,48 +40,35 @@ public class ClasspathZipRuleFileLoader extends AbstractFilebasedRuleFileLoader 
         ZipInputStream zipper = null;
         try {
             final List rules = new ArrayList();
-         /*   final InputStream input = getClass().getClassLoader().getResourceAsStream(this.classpathReference);
+            final InputStream input = getClass().getClassLoader().getResourceAsStream(this.classpathReference);
             if (input == null) throw new FileNotFoundException("Unable to locate zipped rule file on classpath: "+this.classpathReference);
-*/
-            String path = getClass().getClassLoader().getResource(this.classpathReference).toURI().getPath();
-            ZipFile zipFile = new ZipFile(path);
-            /*zipper = new ZipInputStream(new BufferedInputStream(input));
-            FileUtils.copyInputStreamToFile(input,zip);
+            zipper = new ZipInputStream( new BufferedInputStream(input) );
+            ZipEntry zipEntry;
+            do {
+                zipEntry = zipper.getNextEntry();
+                if (zipEntry != null) {
+                    if (!zipEntry.isDirectory()) {
+                        String name = zipEntry.getName();
+                        if (name != null && isMatchingSuffix(name)) {
+                            // remove leading slash if there is one
+                            if (name.startsWith("/") && name.length()>1) name = name.substring(1);
+                            if (name.startsWith(this.path)) { //= OK, we've got a relevant file here
+                                final Properties properties = new Properties();
+                                properties.load(zipper);
+                                rules.add( new RuleFile(name,properties) );
+                            }
+                        }
+                    } else{
 
-            for (File dir : zip.listFiles()){
-                if(dir.canRead()){
-                    for(String ruleName: dir.list()) {
-                        createRuleFile(zipper, rules, ruleName);
                     }
+                    zipper.closeEntry();
                 }
-            }*/
-
-
-
-
-
-
-
-
-
-
+            } while (zipEntry != null);
             return (RuleFile[])rules.toArray(new RuleFile[0]);
         } catch (Exception e) {
             throw new RuleLoadingException(e);
         } finally {
             if (zipper != null) try { zipper.close(); } catch(IOException ignored) {}
-        }
-	}
-
-    private void createRuleFile(ZipInputStream zipper, List rules, String name) throws IOException {
-        if (name != null && isMatchingSuffix(name)) {
-            // remove leading slash if there is one
-            if (name.startsWith("/") && name.length()>1) name = name.substring(1);
-            if (name.startsWith(this.path)) { //= OK, we've got a relevant file here
-                final Properties properties = new Properties();
-                properties.load(zipper);
-                rules.add( new RuleFile(name,properties) );
-            }
         }
     }
 }

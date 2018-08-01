@@ -32,7 +32,7 @@ public final class FilterLoadConfigUtils {
             case "incoming-protection-excludes":
                 requestDefinitionContainer = new IncomingProtectionExcludeDefinitionContainer(ruleFileLoader);
                 break;
-            case "response-modification":
+            case "response-modifications":
                 requestDefinitionContainer = new ResponseModificationDefinitionContainer(ruleFileLoader);
                 break;
             case "whitelist-requests":
@@ -40,6 +40,9 @@ public final class FilterLoadConfigUtils {
                 break;
             case "bad-requests":
                 requestDefinitionContainer = new BadRequestDefinitionContainer(ruleFileLoader);
+                break;
+            case "denial-of-service-limits":
+                requestDefinitionContainer = new DenialOfServiceLimitDefinitionContainer(ruleFileLoader);
                 break;
         }
         return requestDefinitionContainer;
