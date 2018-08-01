@@ -4,7 +4,7 @@ import com.ks.crypto.ParameterAndFormProtection;
 import com.ks.parser.RelaxingHtmlParser;
 import com.ks.pojo.Permutation;
 import com.ks.pojo.WordDictionary;
-import com.ks.wrapper.SessionWrapper;
+import com.ks.SessionWrapper;
 
 import javax.servlet.http.HttpSession;
 import java.io.UnsupportedEncodingException;
@@ -1236,7 +1236,7 @@ public final class ServerUtils {
 
 
 
-	public static void renameSecretTokenParameterInAllCachedParameterAndFormProtectionObjects(final HttpSession session, final String oldSecretTokenParameterName, final String newSecretTokenParameterName) {
+	public static void renameSecretTokenParameterInAllCachedParameterAndFormProtectionObjects(final HttpSession session, final String oldSecretTokenParameterName, final String newSecretTokenParameterName, final boolean applySetAfterWrite) {
 		if (session == null) return;
 		try {
 			for (final Enumeration names = getAttributeNamesIncludingInternal(session); names.hasMoreElements();) {
@@ -1244,14 +1244,13 @@ public final class ServerUtils {
 				final Object value = getAttributeIncludingInternal(session, name);
 				if (value instanceof ParameterAndFormProtection) {
 					((ParameterAndFormProtection)value).renameSecretTokenParameterName(oldSecretTokenParameterName, newSecretTokenParameterName);
-					session.setAttribute(name, value);
+					if (applySetAfterWrite) session.setAttribute(name, value);
 				}
 			}
 		} catch (IllegalStateException e) {
 			System.err.println("Not required to rename token parameter names since session already invalidated"); // TODO: better logging
 		}
 	}
-
 
 
 

@@ -1,4 +1,4 @@
-package com.ks.wrapper;
+package com.ks;
 
 import com.ks.trackers.SessionCreationTracker;
 import com.ks.utils.ContentInjectionHelper;

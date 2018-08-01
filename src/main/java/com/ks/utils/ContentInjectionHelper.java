@@ -7,8 +7,8 @@ import com.ks.crypto.CryptoKeyAndSalt;
 import com.ks.pojo.WordDictionary;
 import com.ks.response.ResponseFilterStream;
 import com.ks.response.ResponseFilterWriter;
-import com.ks.wrapper.RequestWrapper;
-import com.ks.wrapper.ResponseWrapper;
+import com.ks.RequestWrapper;
+import com.ks.ResponseWrapper;
 
 import javax.crypto.Cipher;
 import javax.servlet.ServletOutputStream;

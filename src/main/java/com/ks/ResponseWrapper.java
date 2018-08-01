@@ -1,11 +1,10 @@
-package com.ks.wrapper;
+package com.ks;
 
 import com.ks.attack.AttackHandler;
 import com.ks.crypto.CryptoKeyAndSalt;
 import com.ks.exceptions.ServerAttackException;
 import com.ks.pojo.WordDictionary;
 import com.ks.utils.ContentInjectionHelper;
-import com.ks.utils.ParamConsts;
 import com.ks.utils.ResponseUtils;
 import com.ks.utils.ServerUtils;
 
@@ -19,10 +18,7 @@ import java.io.IOException;
 import java.io.PrintWriter;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
-import java.util.Date;
-import java.util.Locale;
-import java.util.Map;
-import java.util.TimeZone;
+import java.util.*;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -75,6 +71,7 @@ public final class ResponseWrapper extends HttpServletResponseWrapper {
 
 	private final String requestedURL, servletPath, contextPath, ip;
 
+	private final Set/*<String>*/ responseModificationContentTypes;
 
 	private final boolean isCurrentRequestOfRelevantResourceType, isOptimizationHint, appendQuestionmarkOrAmpersandToLinks, appendSessionIdToLinks;
 	//private boolean mayBeModified = false;
@@ -96,7 +93,7 @@ public final class ResponseWrapper extends HttpServletResponseWrapper {
 	private String cryptoDetectionString;
 	private final Cipher cipher;
 	private CryptoKeyAndSalt cryptoKey;
-	private boolean cryptoApplied = false, pdfXssProtection;
+	private boolean cryptoApplied = false, pdfXssProtection = false;
 
 
 
@@ -107,26 +104,27 @@ public final class ResponseWrapper extends HttpServletResponseWrapper {
 
 
 
-	public ResponseWrapper(final HttpServletResponse response, final RequestWrapper request, final AttackHandler attackHandler, final ContentInjectionHelper contentInjectionHelper, final boolean isOptimizationHint, final String cryptoDetectionString, final Cipher cipher, final CryptoKeyAndSalt cryptoKey, final String tokenKey, final String tokenValue, final String parameterAndFormProtectionKeyKey, final boolean blockResponseHeadersWithCRLF, final boolean blockNonLocalRedirects, final String ip,
-                           final WordDictionary[] prefiltersToExcludeCompleteScript, final Matcher[] matchersToExcludeCompleteScript,
-                           final WordDictionary[] prefiltersToExcludeCompleteTag, final Matcher[] matchersToExcludeCompleteTag,
-                           final WordDictionary[] prefiltersToExcludeLinksWithinScripts, final Matcher[] matchersToExcludeLinksWithinScripts,
-                           final WordDictionary[] prefiltersToExcludeLinksWithinTags, final Matcher[] matchersToExcludeLinksWithinTags,
-                           final WordDictionary[] prefiltersToCaptureLinksWithinScripts, final Matcher[] matchersToCaptureLinksWithinScripts,
-                           final WordDictionary[] prefiltersToCaptureLinksWithinTags, final Matcher[] matchersToCaptureLinksWithinTags,
-                           final int[][] groupNumbersToCaptureLinksWithinScripts,
-                           final int[][] groupNumbersToCaptureLinksWithinTags,
-                           final boolean useFullPathForResourceToBeAccessedProtection, final boolean additionalFullResourceRemoval, final boolean additionalMediumResourceRemoval, final boolean maskAmpersandsInModifiedLinks,
-                           final boolean hiddenFormFieldProtection, final boolean selectboxProtection, final boolean checkboxProtection, final boolean radiobuttonProtection, final boolean selectboxValueMasking, final boolean checkboxValueMasking, final boolean radiobuttonValueMasking,
-                           final boolean appendSessionIdToLinks, final boolean reuseSessionContent,
-                           final String honeylinkPrefix, final String honeylinkSuffix, final short honeylinkMaxPerPage, final boolean randomizeHoneylinksOnEveryRequest,
-                           final boolean pdfXssProtection) {
+	public ResponseWrapper(final HttpServletResponse response, final RequestWrapper request, final AttackHandler attackHandler, final ContentInjectionHelper contentInjectionHelper, final boolean isOptimizationHint, final String cryptoDetectionString, final Cipher cipher, final CryptoKeyAndSalt cryptoKey, final String tokenKey,final String tokenValue, final String parameterAndFormProtectionKeyKey, final boolean blockResponseHeadersWithCRLF, final boolean blockFutureLastModifiedHeaders, final boolean blockInvalidLastModifiedHeaders, final boolean blockNonLocalRedirects, final String ip, final Set/*<String>*/ responseModificationContentTypes,
+						   final WordDictionary[] prefiltersToExcludeCompleteScript, final Matcher[] matchersToExcludeCompleteScript,
+						   final WordDictionary[] prefiltersToExcludeCompleteTag, final Matcher[] matchersToExcludeCompleteTag,
+						   final WordDictionary[] prefiltersToExcludeLinksWithinScripts, final Matcher[] matchersToExcludeLinksWithinScripts,
+						   final WordDictionary[] prefiltersToExcludeLinksWithinTags, final Matcher[] matchersToExcludeLinksWithinTags,
+						   final WordDictionary[] prefiltersToCaptureLinksWithinScripts, final Matcher[] matchersToCaptureLinksWithinScripts,
+						   final WordDictionary[] prefiltersToCaptureLinksWithinTags, final Matcher[] matchersToCaptureLinksWithinTags,
+						   final int[][] groupNumbersToCaptureLinksWithinScripts,
+						   final int[][] groupNumbersToCaptureLinksWithinTags,
+						   //final List<String>[] tagNamesToCheck,
+						   final boolean useFullPathForResourceToBeAccessedProtection, final boolean additionalFullResourceRemoval, final boolean additionalMediumResourceRemoval, final boolean maskAmpersandsInModifiedLinks,
+						   final boolean hiddenFormFieldProtection, final boolean selectboxProtection, final boolean checkboxProtection, final boolean radiobuttonProtection, final boolean selectboxValueMasking, final boolean checkboxValueMasking, final boolean radiobuttonValueMasking,
+						   final boolean appendQuestionmarkOrAmpersandToLinks, final boolean appendSessionIdToLinks, final boolean reuseSessionContent,
+						   final String honeylinkPrefix, final String honeylinkSuffix, final short honeylinkMaxPerPage, final boolean randomizeHoneylinksOnEveryRequest,
+						   final boolean pdfXssProtection, final boolean applySetAfterWrite) {
 		super(response);
 		if (DEBUG) System.out.println(" =========> new RequestWrapper");
-		if (request == null) throw new IllegalArgumentException("request must not be null");
-		if (attackHandler == null) throw new IllegalArgumentException("attackHandler must not be null");
-		if (contentInjectionHelper == null) throw new IllegalArgumentException("contentInjectionHelper must not be null");
-		if (ip == null) throw new IllegalArgumentException("ip must not be null");
+		if (request == null) throw new NullPointerException("request must not be null");
+		if (attackHandler == null) throw new NullPointerException("attackHandler must not be null");
+		if (contentInjectionHelper == null) throw new NullPointerException("contentInjectionHelper must not be null");
+		if (ip == null) throw new NullPointerException("ip must not be null");
 		this.request = request;
 		this.attackHandler = attackHandler;
 		this.contentInjectionHelper = contentInjectionHelper;
@@ -142,32 +140,30 @@ public final class ResponseWrapper extends HttpServletResponseWrapper {
 		this.additionalFullResourceRemoval = additionalFullResourceRemoval;
 		this.additionalMediumResourceRemoval = additionalMediumResourceRemoval;
 
-		if (matchersToExcludeCompleteScript == null) throw new IllegalArgumentException("matchersToExcludeCompleteScript must not be null");
-		if (matchersToExcludeCompleteTag == null) throw new IllegalArgumentException("matchersToExcludeCompleteTag must not be null");
+		if (matchersToExcludeCompleteScript == null) throw new NullPointerException("matchersToExcludeCompleteScript must not be null");
+		if (matchersToExcludeCompleteTag == null) throw new NullPointerException("matchersToExcludeCompleteTag must not be null");
 		this.prefiltersToExcludeCompleteScript = prefiltersToExcludeCompleteScript;
 		this.matchersToExcludeCompleteScript = matchersToExcludeCompleteScript;
 		this.prefiltersToExcludeCompleteTag = prefiltersToExcludeCompleteTag;
 		this.matchersToExcludeCompleteTag = matchersToExcludeCompleteTag;
-		if (matchersToExcludeLinksWithinScripts == null) throw new IllegalArgumentException("matchersToExcludeLinksWithinScripts must not be null");
-		if (matchersToExcludeLinksWithinTags == null) throw new IllegalArgumentException("matchersToExcludeLinksWithinTags must not be null");
+		if (matchersToExcludeLinksWithinScripts == null) throw new NullPointerException("matchersToExcludeLinksWithinScripts must not be null");
+		if (matchersToExcludeLinksWithinTags == null) throw new NullPointerException("matchersToExcludeLinksWithinTags must not be null");
 		this.prefiltersToExcludeLinksWithinScripts = prefiltersToExcludeLinksWithinScripts;
 		this.matchersToExcludeLinksWithinScripts = matchersToExcludeLinksWithinScripts;
 		this.prefiltersToExcludeLinksWithinTags = prefiltersToExcludeLinksWithinTags;
 		this.matchersToExcludeLinksWithinTags = matchersToExcludeLinksWithinTags;
 
-		if (matchersToCaptureLinksWithinScripts == null) throw new IllegalArgumentException("matchersToCaptureLinksWithinScripts must not be null");
-		if (matchersToCaptureLinksWithinTags == null) throw new IllegalArgumentException("matchersToCaptureLinksWithinTags must not be null");
+		if (matchersToCaptureLinksWithinScripts == null) throw new NullPointerException("matchersToCaptureLinksWithinScripts must not be null");
+		if (matchersToCaptureLinksWithinTags == null) throw new NullPointerException("matchersToCaptureLinksWithinTags must not be null");
 		this.prefiltersToCaptureLinksWithinScripts = prefiltersToCaptureLinksWithinScripts;
 		this.matchersToCaptureLinksWithinScripts = matchersToCaptureLinksWithinScripts;
 		this.prefiltersToCaptureLinksWithinTags = prefiltersToCaptureLinksWithinTags;
 		this.matchersToCaptureLinksWithinTags = matchersToCaptureLinksWithinTags;
-		for (Matcher matchersToCaptureLinksWithinScript : matchersToCaptureLinksWithinScripts) {
-			if (matchersToCaptureLinksWithinScript.groupCount() < 1)
-				throw new IllegalArgumentException("Pattern must have an explicitly defined capturing group to identify the URL: " + matchersToCaptureLinksWithinScript.pattern());
+		for (int i=0; i<matchersToCaptureLinksWithinScripts.length; i++) {
+			if (matchersToCaptureLinksWithinScripts[i].groupCount() < 1) throw new IllegalArgumentException("Pattern must have an explicitly defined capturing group to identify the URL: "+matchersToCaptureLinksWithinScripts[i].pattern());
 		}
-		for (Matcher matchersToCaptureLinksWithinTag : matchersToCaptureLinksWithinTags) {
-			if (matchersToCaptureLinksWithinTag.groupCount() < 1)
-				throw new IllegalArgumentException("Pattern must have an explicitly defined capturing group to identify the URL: " + matchersToCaptureLinksWithinTag.pattern());
+		for (int i=0; i<matchersToCaptureLinksWithinTags.length; i++) {
+			if (matchersToCaptureLinksWithinTags[i].groupCount() < 1) throw new IllegalArgumentException("Pattern must have an explicitly defined capturing group to identify the URL: "+matchersToCaptureLinksWithinTags[i].pattern());
 		}
 
 		this.groupNumbersToCaptureLinksWithinScripts = groupNumbersToCaptureLinksWithinScripts;
@@ -183,13 +179,14 @@ public final class ResponseWrapper extends HttpServletResponseWrapper {
 
 		this.parameterAndFormProtectionKeyKey = parameterAndFormProtectionKeyKey; // may be null
 		this.blockResponseHeadersWithCRLF = blockResponseHeadersWithCRLF;
-		this.blockFutureLastModifiedHeaders = true;
-		this.blockInvalidLastModifiedHeaders = true;
+		this.blockFutureLastModifiedHeaders = blockFutureLastModifiedHeaders;
+		this.blockInvalidLastModifiedHeaders = blockInvalidLastModifiedHeaders;
 		this.blockNonLocalRedirects = blockNonLocalRedirects;
 		this.requestedURL = ""+request.getRequestURL();
 		this.servletPath = request.getServletPath();
 		this.contextPath = request.getContextPath();
 		this.ip = ip;
+		this.responseModificationContentTypes = responseModificationContentTypes;
 		this.isCurrentRequestOfRelevantResourceType = !this.contentInjectionHelper.isMatchingOutgoingResponseModificationExclusion(servletPath, request.getRequestURI());
 		this.isOptimizationHint = isOptimizationHint;
 		this.maskAmpersandsInModifiedLinks = maskAmpersandsInModifiedLinks;
@@ -202,7 +199,7 @@ public final class ResponseWrapper extends HttpServletResponseWrapper {
 		this.checkboxValueMasking = checkboxValueMasking;
 		this.radiobuttonValueMasking = radiobuttonValueMasking;
 
-		this.appendQuestionmarkOrAmpersandToLinks = true;
+		this.appendQuestionmarkOrAmpersandToLinks = appendQuestionmarkOrAmpersandToLinks;
 		this.appendSessionIdToLinks = appendSessionIdToLinks;
 		this.reuseSessionContent = reuseSessionContent;
 
@@ -213,8 +210,15 @@ public final class ResponseWrapper extends HttpServletResponseWrapper {
 
 		this.pdfXssProtection = pdfXssProtection;
 
-		this.applySetAfterWrite = true;
+		this.applySetAfterWrite = applySetAfterWrite;
 	}
+
+
+
+
+
+
+
 
 	// as the caller is allowed to re-define (and therefore overwrite) the crypto settings as is the case in renew-session-points
 	public /*synchronized*/ void redefineCryptoDetectionString(final String cryptoDetectionString) {
@@ -225,6 +229,8 @@ public final class ResponseWrapper extends HttpServletResponseWrapper {
 		if (this.cryptoApplied) throw new IllegalStateException("Crypto setting already applied to response (can not redefine any more)");
 		this.cryptoKey = cryptoKey;
 	}
+
+
 
 	// as the caller is allowed to re-define (and therefore overwrite) the secret tokens as is the case in renew-session-points
 	public /*synchronized*/ void redefineSecretTokenKey(final String key) {
@@ -244,14 +250,35 @@ public final class ResponseWrapper extends HttpServletResponseWrapper {
 		this.parameterAndFormProtectionKeyKey = key;
 	}
 
+
+	private boolean isResponseModificationAllowed() {
+		if (this.isCurrentRequestOfRelevantResourceType) {
+			// determine content type
+			String contentTypeUpperCased = extractContentTypeUpperCased();
+			if (contentTypeUpperCased == null) contentTypeUpperCased = "NULL"; // yes, the word "null" means "match with an unset content-type" here...
+			if (this.responseModificationContentTypes != null && this.responseModificationContentTypes.size() > 0) {
+				// check if it matches
+				if ( this.responseModificationContentTypes.contains(contentTypeUpperCased) ) {
+					if (DEBUG) System.out.println("isResponseModificationAllowed() is true");
+					//this.mayBeModified = true;
+					return true;
+				} else if (DEBUG) System.out.println("isResponseModificationAllowed() check 3 is false ("+contentTypeUpperCased+"): "+this.responseModificationContentTypes);
+			} else if (DEBUG) System.out.println("isResponseModificationAllowed() check 2 is false");
+		} else if (DEBUG) System.out.println("isResponseModificationAllowed() check 1 is false");
+		if (DEBUG) System.out.println("isResponseModificationAllowed() is false");
+		return false;
+	}
+
+
 	private ServletOutputStream cachedServletOutputStream;
-	public ServletOutputStream getOutputStream() throws IOException {
+
+	public /*synchronized*/ ServletOutputStream getOutputStream() throws IOException {
 		if (DEBUG) System.out.println("getOutputStream() called");
 		if (this.cachedServletOutputStream == null) {
 			this.secretTokensApplied = true;
 			this.parameterAndFormTokensApplied = true;
 			this.cryptoApplied = true;
-			if (!this.isOptimizationHint) {
+			if (!this.isOptimizationHint && isResponseModificationAllowed()) {
 				this.cachedServletOutputStream = this.contentInjectionHelper.addActivatedFilters(super.getCharacterEncoding(),super.getOutputStream(),this.requestedURL,this.contextPath,this.servletPath,tokenKey,tokenValue,cryptoDetectionString,cipher,cryptoKey,this.parameterAndFormProtectionKeyKey,request,this,
 						this.prefiltersToExcludeCompleteScript, this.matchersToExcludeCompleteScript,
 						this.prefiltersToExcludeCompleteTag, this.matchersToExcludeCompleteTag,
@@ -261,6 +288,7 @@ public final class ResponseWrapper extends HttpServletResponseWrapper {
 						this.prefiltersToCaptureLinksWithinTags, this.matchersToCaptureLinksWithinTags,
 						this.groupNumbersToCaptureLinksWithinScripts,
 						this.groupNumbersToCaptureLinksWithinTags,
+						//this.tagNamesToCheck,
 						this.useFullPathForResourceToBeAccessedProtection, this.additionalFullResourceRemoval, this.additionalMediumResourceRemoval, this.maskAmpersandsInModifiedLinks,
 						this.hiddenFormFieldProtection, this.selectboxProtection, this.checkboxProtection, this.radiobuttonProtection, this.selectboxValueMasking, this.checkboxValueMasking, this.radiobuttonValueMasking,
 						this.appendQuestionmarkOrAmpersandToLinks, this.appendSessionIdToLinks, this.reuseSessionContent,
@@ -277,7 +305,7 @@ public final class ResponseWrapper extends HttpServletResponseWrapper {
 			this.secretTokensApplied = true;
 			this.parameterAndFormTokensApplied = true;
 			this.cryptoApplied = true;
-			if (!this.isOptimizationHint) {
+			if (!this.isOptimizationHint && isResponseModificationAllowed()) {
 				this.cachedPrintWriter = this.contentInjectionHelper.addActivatedFilters(super.getWriter(),this.requestedURL,this.contextPath,this.servletPath,tokenKey,tokenValue,cryptoDetectionString,cipher,cryptoKey,this.parameterAndFormProtectionKeyKey,request,this,
 						this.prefiltersToExcludeCompleteScript, this.matchersToExcludeCompleteScript,
 						this.prefiltersToExcludeCompleteTag, this.matchersToExcludeCompleteTag,
@@ -319,6 +347,11 @@ public final class ResponseWrapper extends HttpServletResponseWrapper {
 		this.statusCode = statusCode;
 		super.setStatus(statusCode);
 	}
+	//1.5@Override
+	public void setStatus(final int statusCode, final String message) {
+		this.statusCode = statusCode;
+		super.setStatus(statusCode, message);
+	}
 
 	//1.5@Override
 	public void sendError(final int statusCode) throws IOException {
@@ -331,7 +364,7 @@ public final class ResponseWrapper extends HttpServletResponseWrapper {
 		super.sendError(statusCode, message);
 	}
 
-	public int getCapturedStatus() {
+	protected int getCapturedStatus() {
 		return this.statusCode;
 	}
 
@@ -339,7 +372,7 @@ public final class ResponseWrapper extends HttpServletResponseWrapper {
 
 	//1.5@Override
 	public void setContentLength(int length) {
-		if (ParamConsts.REMOVE_CONTENT_LENGTH_FOR_MODIFIABLE_RESPONSES ) {
+		if (KsWafFilter.REMOVE_CONTENT_LENGTH_FOR_MODIFIABLE_RESPONSES && isResponseModificationAllowed()) {
 			if (DEBUG) System.out.println("Original response content length removed");
 		} else {
 			if (DEBUG) System.out.println("Response content length: "+length);
@@ -499,7 +532,7 @@ public final class ResponseWrapper extends HttpServletResponseWrapper {
 
 
 	private boolean isRedirectingDueToRecentAttack = false;
-	public void sendRedirectDueToRecentAttack(final String location) throws IOException {
+	void sendRedirectDueToRecentAttack(final String location) throws IOException {
 		// count the overall number of redirects per second of this client and stop when threshold is reached
 		if (this.attackHandler.isRedirectThresholdReached(this.ip)) {
 			final String message = "Redirect per-client threshold ("+this.attackHandler.getRedirectThreshold()+" per reset period "+(this.attackHandler.getRedirectThresholdResetPeriod()/1000)+" seconds) reached: "+location;
@@ -515,7 +548,6 @@ public final class ResponseWrapper extends HttpServletResponseWrapper {
 
 
 
-	//1.5@Override
 	public String encodeURL(String url) {
 		if (DEBUG) System.out.println(" =========> encodeURL: "+url);
 		if (!this.isOptimizationHint) return super.encodeURL(url);
@@ -532,11 +564,6 @@ public final class ResponseWrapper extends HttpServletResponseWrapper {
 		}
 		return url;
 	}
-
-	public String encodeUrl(final String url) {
-		return this.encodeURL(url);
-	}
-
 
 
 	private void checkHeaderAgainstCRLF(final String value) {
@@ -583,7 +610,6 @@ public final class ResponseWrapper extends HttpServletResponseWrapper {
 		if (location == null) return false;
 		// OLD: if (location.toLowerCase().startsWith("http")) {
 		if (ServerUtils.containsColonBeforeFirstSlashOrQuestionmark(location)) {
-			// TODO: hier ggf. noch zusaetzlich den Context-Anteil der URL checken
 			if (ServerUtils.isSameServer(location,this.requestedURL)) return true;
 		} else {
 			final char firstChar = location.charAt(0);
@@ -602,11 +628,10 @@ public final class ResponseWrapper extends HttpServletResponseWrapper {
 	private Date parseHttpDate(final String value) {
 		if (value == null || value.length() == 0) return null;
 		Date result = null;
-		for (SimpleDateFormat HTTP_DATE_FORMAT : HTTP_DATE_FORMATS) {
+		for (int i=0; i<HTTP_DATE_FORMATS.length; i++) {
 			try {
-				result = HTTP_DATE_FORMAT.parse(value);
-			} catch (ParseException | RuntimeException ignored) {
-			}
+				result = HTTP_DATE_FORMATS[i].parse(value);
+			} catch (ParseException ignored) {} catch (RuntimeException ignored) {}
 		}
 		return result;
 	}
@@ -615,7 +640,7 @@ public final class ResponseWrapper extends HttpServletResponseWrapper {
 
 
 
-	private /*synchronized*/ String injectSecretTokenIntoLink(String result, final boolean urlAlreadyDecodedAndDoesNotNeedToBeEncodedAndStartsWithCheckAlreadyDone, final boolean isRedirect) {
+	private  String injectSecretTokenIntoLink(String result, final boolean urlAlreadyDecodedAndDoesNotNeedToBeEncodedAndStartsWithCheckAlreadyDone, final boolean isRedirect) {
 		if (result == null) return null;
 		this.secretTokensApplied = true;
 		if (this.contentInjectionHelper.isInjectSecretTokenIntoLinks()) {
@@ -634,7 +659,7 @@ public final class ResponseWrapper extends HttpServletResponseWrapper {
 	/**
 	 * for link only
 	 */
-	private /*synchronized*/ String injectParameterAndFormProtectionIntoLink(String result, final boolean urlAlreadyDecodedAndDoesNotNeedToBeEncodedAndStartsWithCheckAlreadyDone, final boolean isRedirect) {
+	private String injectParameterAndFormProtectionIntoLink(String result, final boolean urlAlreadyDecodedAndDoesNotNeedToBeEncodedAndStartsWithCheckAlreadyDone, final boolean isRedirect) {
 		if (result == null) return null;
 		this.parameterAndFormTokensApplied = true;
 		if (this.contentInjectionHelper.isProtectParametersAndForms() // so this.contentInjectionHelper.isEncryptQueryStringInLinks() is automatically true
@@ -653,26 +678,10 @@ public final class ResponseWrapper extends HttpServletResponseWrapper {
 		}
 		return result;
 	}
-    /*
-     * for link togther with form only
-     *
-    /*synchronized* / String injectParameterAndFormProtectionIntoLink(String result, final ParameterAndFormProtection pafp) {
-        if (result == null || pafp == null) return null;
-        this.parameterAndFormTokensApplied = true;
-        if (this.contentInjectionHelper.isProtectParametersAndForms()) { // so this.contentInjectionHelper.isEncryptQueryStringInLinks() is autmatically true
-            final HttpSession session = this.request.getSession(false);
-            if (session != null) {
-                final String parameterAndFormProtectionValue = ResponseUtils.getKeyForParameterAndFormProtection(result, pafp, session, this.reuseSessionContent);
-                if (parameterAndFormProtectionValue != null && !ResponseUtils.isAlreadyEncrypted(this.cryptoDetectionString,result)) { // = only inject tokens when either encryption is disabled or has not taken place, when for example response.encodeURL already caught that URL
-                    result = ResponseUtils.injectParameterIntoURL(result, this.parameterAndFormProtectionKeyKey, parameterAndFormProtectionValue, this.maskAmpersandsInModifiedLinks, this.appendQuestionmarkOrAmpersandToLinks);
-                }
-            } else System.err.println("Strange situation: session does not exist where expected: injectParameterAndFormProtectionIntoLink()");
-        }
-        return result;
-    }*/
 
 
-	private /*synchronized*/ String encryptQueryStringInLink(String result, final Boolean isRequestMethodPOST) {
+
+	private String encryptQueryStringInLink(String result, final Boolean isRequestMethodPOST) {
 		if (result == null) return null;
 		this.cryptoApplied = true;
 		if (this.contentInjectionHelper.isEncryptQueryStringInLinks()
@@ -681,9 +690,6 @@ public final class ResponseWrapper extends HttpServletResponseWrapper {
 			result = ResponseUtils.encryptQueryStringInURL(this.requestedURL, this.contextPath, this.servletPath, result, false, false, isRequestMethodPOST, this.contentInjectionHelper.isSupposedToBeStaticResource(ResponseUtils.extractURI(result)), this.cryptoDetectionString, this.cipher, this.cryptoKey, useFullPathForResourceToBeAccessedProtection, this.additionalFullResourceRemoval, this.additionalMediumResourceRemoval, this, this.appendQuestionmarkOrAmpersandToLinks);
 		return result;
 	}
-
-
-
 
 
 }

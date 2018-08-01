@@ -55,7 +55,7 @@ public final class DefaultAttackLogger implements AttackLogger {
 
 
 	@Override
-	public void init(final String application, final boolean logVerboseForDevelopmentMode) {
+	public void init(final String application, final boolean isProductionMode, final boolean logVerboseForDevelopmentMode) {
 		this.securityLogger =  Logger.getLogger("KsWaf-Security."+application);
 		if(StringUtils.isEmpty(this.directory)){
 			this.directory = DEFAULT_LOGGER_DIRECTORY;
@@ -81,7 +81,7 @@ public final class DefaultAttackLogger implements AttackLogger {
 			this.fileHandlerPointerForSecurityLogging.setEncoding(ParamConsts.DEFAULT_CHARACTER_ENCODING);
 			final Formatter formatter = new SimpleFormatter();
 			fileHandlerPointerForSecurityLogging.setFormatter(formatter);
-			if (logVerboseForDevelopmentMode) {
+			if (logVerboseForDevelopmentMode && !isProductionMode) {
 				this.handlerForSecurityLogging = fileHandlerPointerForSecurityLogging; //= use without MemoryHandler wrapper
 				// set logger level to fine to be verbose
 				securityLogger.setLevel(Level.FINE);
@@ -125,7 +125,7 @@ public final class DefaultAttackLogger implements AttackLogger {
 
 
 
-	public void log(boolean warning, String message) throws AttackLoggingException {
+	public void log(boolean warning,  String message) throws AttackLoggingException {
 		if (this.securityLogger == null) return;
 
 		if (warning) {

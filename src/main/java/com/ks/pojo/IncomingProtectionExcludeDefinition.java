@@ -1,25 +1,30 @@
 package com.ks.pojo;
+
 import com.ks.pojo.interfaces.CustomRequestMatcher;
 
 import java.util.regex.Pattern;
 
 public final class IncomingProtectionExcludeDefinition extends RequestDefinition {
 	private static final long serialVersionUID = 1L;
-	private boolean excludeForceEntranceProtection;
-	private boolean excludeParameterAndFormProtection;
-	private boolean excludeSelectboxFieldProtection;
+	private boolean excludeForceEntranceProtection,
+			excludeParameterAndFormProtection,
+			excludeSelectboxFieldProtection,
+			excludeCheckboxFieldProtection,
+			excludeRadiobuttonFieldProtection,
+			excludeReferrerProtection,
+			excludeSecretTokenProtection,
+			excludeSessionToHeaderBindingProtection,
+			excludeExtraSessionTimeoutHandling;
 
-	public IncomingProtectionExcludeDefinition(boolean enabled, String identification, String description, WordDictionary servletPathPrefilter, Pattern servletPathPattern, boolean servletPathPatternNegated) {
+	public IncomingProtectionExcludeDefinition(final boolean enabled, final String identification, final String description,    final WordDictionary servletPathPrefilter, final Pattern servletPathPattern, final boolean servletPathPatternNegated) {
 		super(enabled, identification, description, servletPathPrefilter, servletPathPattern, servletPathPatternNegated);
 	}
-
-	public IncomingProtectionExcludeDefinition(boolean enabled, String identification, String description, CustomRequestMatcher customRequestMatcher) {
+	public IncomingProtectionExcludeDefinition(final boolean enabled, final String identification, final String description,    final CustomRequestMatcher customRequestMatcher) {
 		super(enabled, identification, description, customRequestMatcher);
 	}
 
-
 	public boolean isExcludeForceEntranceProtection() {
-		return this.excludeForceEntranceProtection;
+		return excludeForceEntranceProtection;
 	}
 
 	public void setExcludeForceEntranceProtection(boolean excludeForceEntranceProtection) {
@@ -27,7 +32,7 @@ public final class IncomingProtectionExcludeDefinition extends RequestDefinition
 	}
 
 	public boolean isExcludeParameterAndFormProtection() {
-		return this.excludeParameterAndFormProtection;
+		return excludeParameterAndFormProtection;
 	}
 
 	public void setExcludeParameterAndFormProtection(boolean excludeParameterAndFormProtection) {
@@ -35,7 +40,7 @@ public final class IncomingProtectionExcludeDefinition extends RequestDefinition
 	}
 
 	public boolean isExcludeSelectboxFieldProtection() {
-		return this.excludeSelectboxFieldProtection;
+		return excludeSelectboxFieldProtection;
 	}
 
 	public void setExcludeSelectboxFieldProtection(boolean excludeSelectboxFieldProtection) {
@@ -43,7 +48,7 @@ public final class IncomingProtectionExcludeDefinition extends RequestDefinition
 	}
 
 	public boolean isExcludeCheckboxFieldProtection() {
-		return this.excludeCheckboxFieldProtection;
+		return excludeCheckboxFieldProtection;
 	}
 
 	public void setExcludeCheckboxFieldProtection(boolean excludeCheckboxFieldProtection) {
@@ -51,21 +56,15 @@ public final class IncomingProtectionExcludeDefinition extends RequestDefinition
 	}
 
 	public boolean isExcludeRadiobuttonFieldProtection() {
-		return this.excludeRadiobuttonFieldProtection;
+		return excludeRadiobuttonFieldProtection;
 	}
 
 	public void setExcludeRadiobuttonFieldProtection(boolean excludeRadiobuttonFieldProtection) {
 		this.excludeRadiobuttonFieldProtection = excludeRadiobuttonFieldProtection;
 	}
 
-	private boolean excludeCheckboxFieldProtection;
-	private boolean excludeRadiobuttonFieldProtection;
-	private boolean excludeReferrerProtection;
-	private boolean excludeSecretTokenProtection;
-	private boolean excludeSessionToHeaderBindingProtection;
-
 	public boolean isExcludeReferrerProtection() {
-		return this.excludeReferrerProtection;
+		return excludeReferrerProtection;
 	}
 
 	public void setExcludeReferrerProtection(boolean excludeReferrerProtection) {
@@ -73,20 +72,27 @@ public final class IncomingProtectionExcludeDefinition extends RequestDefinition
 	}
 
 	public boolean isExcludeSecretTokenProtection() {
-		return this.excludeSecretTokenProtection;
+		return excludeSecretTokenProtection;
 	}
 
 	public void setExcludeSecretTokenProtection(boolean excludeSecretTokenProtection) {
 		this.excludeSecretTokenProtection = excludeSecretTokenProtection;
 	}
 
-
 	public boolean isExcludeSessionToHeaderBindingProtection() {
-		return this.excludeSessionToHeaderBindingProtection;
+		return excludeSessionToHeaderBindingProtection;
 	}
 
 	public void setExcludeSessionToHeaderBindingProtection(boolean excludeSessionToHeaderBindingProtection) {
 		this.excludeSessionToHeaderBindingProtection = excludeSessionToHeaderBindingProtection;
+	}
+
+	public boolean isExcludeExtraSessionTimeoutHandling() {
+		return excludeExtraSessionTimeoutHandling;
+	}
+
+	public void setExcludeExtraSessionTimeoutHandling(boolean excludeExtraSessionTimeoutHandling) {
+		this.excludeExtraSessionTimeoutHandling = excludeExtraSessionTimeoutHandling;
 	}
 }
 

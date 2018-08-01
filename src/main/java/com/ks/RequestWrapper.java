@@ -1,8 +1,7 @@
-package com.ks.wrapper;
+package com.ks;
 
 import com.ks.trackers.SessionCreationTracker;
 import com.ks.utils.ContentInjectionHelper;
-import com.ks.utils.ParamConsts;
 import com.ks.utils.RequestUtils;
 import com.ks.utils.ServerUtils;
 
@@ -32,7 +31,7 @@ public final class RequestWrapper extends HttpServletRequestWrapper {
 
 
 	/**
-	 * the current session (the old one when a new one was created by the application) - tracked during a request to detect a session change within a request
+	 * the current session (the old one when a new one was created by the application) - tracked during a request to detect a session change withn a request
 	 */
 	private SessionWrapper currentSessionOfRequest;
 	/**
@@ -56,12 +55,12 @@ public final class RequestWrapper extends HttpServletRequestWrapper {
 
 
 	public RequestWrapper(HttpServletRequest request, final ContentInjectionHelper contentInjectionHelper, final SessionCreationTracker sessionCreationTracker,
-                          final String client, final boolean hideInternalSessionAttributes, final boolean transparentQuerystring, final boolean transparentForwarding) {
+						  final String client, final boolean hideInternalSessionAttributes, final boolean transparentQuerystring, final boolean transparentForwarding) {
 		super(request);
 		this.delegate = request;
-		if (contentInjectionHelper == null) throw new IllegalArgumentException("contentInjectionHelper must not be null");
-		if (sessionCreationTracker == null) throw new IllegalArgumentException("sessionCreationTracker must not be null");
-		if (client == null) throw new IllegalArgumentException("client must not be null");
+		if (contentInjectionHelper == null) throw new NullPointerException("contentInjectionHelper must not be null");
+		if (sessionCreationTracker == null) throw new NullPointerException("sessionCreationTracker must not be null");
+		if (client == null) throw new NullPointerException("client must not be null");
 		this.contentInjectionHelper = contentInjectionHelper;
 		this.sessionCreationTracker = sessionCreationTracker;
 		this.client = client;
@@ -80,12 +79,12 @@ public final class RequestWrapper extends HttpServletRequestWrapper {
 		String result = super.getQueryString();
 		if (this.transparentQuerystring && result != null) {
 			// Secret token key
-			final String secretTokenKey = RequestUtils.retrieveRandomTokenFromSessionIfExisting(delegate, ParamConsts.SESSION_SECRET_RANDOM_TOKEN_KEY_KEY);
+			final String secretTokenKey = RequestUtils.retrieveRandomTokenFromSessionIfExisting(delegate, KsWafFilter.SESSION_SECRET_RANDOM_TOKEN_KEY_KEY);
 			if (secretTokenKey != null) {
 				result = RequestUtils.removeParameter(result, secretTokenKey);
 			}
 			// PAF token key
-			final String pafTokenKey = RequestUtils.retrieveRandomTokenFromSessionIfExisting(delegate, ParamConsts.SESSION_PARAMETER_AND_FORM_PROTECTION_RANDOM_TOKEN_KEY_KEY);
+			final String pafTokenKey = RequestUtils.retrieveRandomTokenFromSessionIfExisting(delegate, KsWafFilter.SESSION_PARAMETER_AND_FORM_PROTECTION_RANDOM_TOKEN_KEY_KEY);
 			if (pafTokenKey != null) {
 				result = RequestUtils.removeParameter(result, pafTokenKey);
 			}
@@ -100,6 +99,27 @@ public final class RequestWrapper extends HttpServletRequestWrapper {
 
 
 	public Object getAttribute(final String name) {
+        /* The following is a list of special attribute names used in JavaEE environments
+                javax.portlet.config
+                javax.portlet.request
+                javax.portlet.response
+
+                javax.servlet.context.tempdir
+
+                javax.servlet.error.request_uri
+
+                javax.servlet.include.context_path
+                javax.servlet.include.request_uri
+                javax.servlet.include.query_string
+                javax.servlet.include.servlet_path
+                javax.servlet.include.path_info
+
+                javax.servlet.forward.context_path
+                javax.servlet.forward.request_uri
+                javax.servlet.forward.query_string
+                javax.servlet.forward.servlet_path
+                javax.servlet.forward.path_info
+         */
 		if (DEBUG) System.out.print("getAttribute("+name+") ==> ");
 		if (this.transparentForwarding
 				&& this.contentInjectionHelper.isEncryptQueryStringInLinks()
@@ -120,27 +140,27 @@ public final class RequestWrapper extends HttpServletRequestWrapper {
 
 
 	protected boolean isInChainCall() {
-		return Boolean.TRUE.equals( super.getAttribute(ParamConsts.REQUEST_NESTED_FORWARD_CALL) );
+		return Boolean.TRUE.equals( super.getAttribute(KsWafFilter.REQUEST_NESTED_FORWARD_CALL) );
 	}
 
 
 	private Hashtable/*<String,String[]>*/ overwrittenParams = new Hashtable();
 	private Set/*<String>*/ removedRequestParameters = new HashSet();
 
-	public void removeEncryptedQueryString(final String cryptoDetectionString) {
-		for (final Enumeration names = getParameterNames(); Objects.requireNonNull(names).hasMoreElements();) {
+	protected void removeEncryptedQueryString(final String cryptoDetectionString) {
+		for (final Enumeration names = getParameterNames(); names.hasMoreElements();) {
 			final String name = (String) names.nextElement();
-			if (name.contains(cryptoDetectionString)) removeParameter(name);
+			if (name.indexOf(cryptoDetectionString) > -1) removeParameter(name);
 		}
 	}
 
-	public void removeParameter(final String name) {
+	protected void removeParameter(final String name) {
 		if (name == null) return;
 //        if (DEBUG) System.out.println("Removing request param: "+name);
 		this.removedRequestParameters.add(name);
 	}
 
-	public void setParameter(String name, String[] values, final boolean overwritePreviousValues) {
+	protected void setParameter(String name, String[] values, final boolean overwritePreviousValues) {
 		if (!overwritePreviousValues) {
 			final String[] oldValues = getParameterValues(name);
 			values = ServerUtils.concatenateArrays(values, oldValues); // use the new values first, an let the old values be appended !
@@ -149,6 +169,7 @@ public final class RequestWrapper extends HttpServletRequestWrapper {
 		if (this.removedRequestParameters.contains(name)) this.removedRequestParameters.remove(name);
 	}
 
+	//1.5@Override
 	public String getParameter(final String name) {
 		final String result;
 		if (this.removedRequestParameters.contains(name)) result = null;
@@ -162,6 +183,7 @@ public final class RequestWrapper extends HttpServletRequestWrapper {
 		return result;
 	}
 
+	//1.5@Override
 	public String[] getParameterValues(String name) {
 		final String[] result;
 		if (this.removedRequestParameters.contains(name)) result = null;
@@ -171,6 +193,7 @@ public final class RequestWrapper extends HttpServletRequestWrapper {
 		return result;
 	}
 
+	//1.5@Override
 	public Enumeration getParameterNames() {
 		if (DEBUG) System.out.println("getParameterNames()");
 		final Vector/*<String>*/ names = new Vector();
@@ -180,15 +203,15 @@ public final class RequestWrapper extends HttpServletRequestWrapper {
 			final String rawName = (String) rawNames.nextElement();
 			if (!this.removedRequestParameters.contains(rawName)) names.add(rawName);
 		}
-		for (Object o : this.overwrittenParams.keySet()) {
-			final String key = (String) o;
+		for (final Iterator/*<String>*/ keys = this.overwrittenParams.keySet().iterator(); keys.hasNext();) {
+			final String key = (String) keys.next();
 			if (!names.contains(key) && !this.removedRequestParameters.contains(key)) names.add(key);
 		}
 		return names.elements();
 	}
 
 	//1.5@Override
-	public Map/*<String,String[]>*/ getParameterMap() {
+		public Map/*<String,String[]>*/ getParameterMap() {
 		Map/*<String,String[]>*/ parameterMap = getRequest().getParameterMap();
 		if (!this.overwrittenParams.isEmpty()) {
 			if (parameterMap == null) parameterMap = new HashMap/*<String,String[]>*/();
@@ -201,7 +224,7 @@ public final class RequestWrapper extends HttpServletRequestWrapper {
 		}
 		final Map copy = new HashMap/*<String,String[]>*/( parameterMap.size() ); // defensive copy, since it will be modified locally
 		for (final Iterator/*<Map.Entry<String,String[]>>*/ entries = parameterMap.entrySet().iterator(); entries.hasNext();) {
-			final Entry/*<String,String[]>*/ entry = (Entry) entries.next();
+			final Map.Entry/*<String,String[]>*/ entry = (Entry) entries.next();
 			final String key = (String) entry.getKey();
 			if (!this.removedRequestParameters.contains(key)) {
 				copy.put(key, checkForUnsecureValues((String[]) entry.getValue()));
@@ -227,20 +250,20 @@ public final class RequestWrapper extends HttpServletRequestWrapper {
 	private SessionWrapper fetchOrCreateSessionWrapper(final HttpSession session, final boolean forceCreation) {
 		SessionWrapper sessionWrapper = null;
 		if (!forceCreation) {
-			final SessionWrapperTransientBox box = (SessionWrapperTransientBox) session.getAttribute(ParamConsts.SESSION_SESSION_WRAPPER_REFERENCE);
+			final SessionWrapperTransientBox box = (SessionWrapperTransientBox) session.getAttribute(KsWafFilter.SESSION_SESSION_WRAPPER_REFERENCE);
 			if (box != null) sessionWrapper = box.getSessionWrapper();
 		}
 		if (sessionWrapper == null) {
 			sessionWrapper = new SessionWrapper(session, this.contentInjectionHelper, this.sessionCreationTracker, this.client, this, this.hideInternalSessionAttributes);
-			session.setAttribute(ParamConsts.SESSION_SESSION_WRAPPER_REFERENCE, new SessionWrapperTransientBox(sessionWrapper));
+			session.setAttribute(KsWafFilter.SESSION_SESSION_WRAPPER_REFERENCE, new SessionWrapperTransientBox(sessionWrapper));
 		}
 		return sessionWrapper;
 	}
 
 
 
-
-	public HttpSession getSession() {
+	//1.5@Override
+	public /*synchronized*/ HttpSession getSession() {
 		HttpSession session = super.getSession();
 		// check if null + check if session has changed meanwhile
 		if (session == null) return null;
@@ -260,8 +283,8 @@ public final class RequestWrapper extends HttpServletRequestWrapper {
 		assert this.currentSessionOfRequest != null;
 		return this.currentSessionOfRequest;
 	}
-
-	public HttpSession getSession(final boolean create) {
+	//1.5@Override
+	public /*synchronized*/ HttpSession getSession(final boolean create) {
 		HttpSession session = super.getSession(create);
 		// check if null + check if session has changed meanwhile
 		if (session == null) return null;
@@ -285,7 +308,7 @@ public final class RequestWrapper extends HttpServletRequestWrapper {
 	protected /*synchronized*/ boolean isTransferProtectiveSessionContentToNewSessionsDefinedByApplication() {
 		return this.transferProtectiveSessionContentToNewSessionsDefinedByApplication;
 	}
-	public/*synchronized*/ void setTransferProtectiveSessionContentToNewSessionsDefinedByApplication(boolean flag) {
+	protected /*synchronized*/ void setTransferProtectiveSessionContentToNewSessionsDefinedByApplication(boolean flag) {
 		this.transferProtectiveSessionContentToNewSessionsDefinedByApplication = flag;
 		if (this.currentSessionOfRequest != null) this.currentSessionOfRequest.setArchiveProtectiveSessionContentOnInvalidate(flag?this:null);
 	}
@@ -297,7 +320,7 @@ public final class RequestWrapper extends HttpServletRequestWrapper {
 	 */
 	private static void transferProtectiveSessionContent(final SessionWrapper source, final HttpSession target) {
 		for (final Iterator entries = source.getArchivedProtectiveContent().entrySet().iterator(); entries.hasNext();) {
-			final Entry entry = (Entry) entries.next();
+			final Map.Entry entry = (Map.Entry) entries.next();
 			target.setAttribute((String)entry.getKey(), entry.getValue());
 		}
 	}
@@ -321,10 +344,10 @@ public final class RequestWrapper extends HttpServletRequestWrapper {
 	}
 
 
-	public boolean isApplyUnsecureParameterValueChecks() {
+	public /*synchronized*/ boolean isApplyUnsecureParameterValueChecks() {
 		return this.applyUnsecureParameterValueChecks;
 	}
-	public void setApplyUnsecureParameterValueChecks(boolean flag) {
+	public /*synchronized*/ void setApplyUnsecureParameterValueChecks(boolean flag) {
 		this.applyUnsecureParameterValueChecks = flag;
 	}
 
@@ -334,21 +357,21 @@ public final class RequestWrapper extends HttpServletRequestWrapper {
 
 	public Enumeration getHeaders(String name) {
 		Enumeration result = super.getHeaders(name);
-		if (ParamConsts.REMOVE_COMPRESSION_ACCEPT_ENCODING_HEADER_VALUES) {
+		if (KsWafFilter.REMOVE_COMPRESSION_ACCEPT_ENCODING_HEADER_VALUES) {
 			if (name != null && result != null && HEADER_ACCEPT_ENCODING.equalsIgnoreCase(name.trim())) {
-				final Vector modified = new Vector(5);
+				final Deque modified = new ArrayDeque(5);
 				while (result.hasMoreElements()) {
 					final String value = (String) result.nextElement();
 					modified.add( removeCompressionEncodings(value) );
 				}
-				result = modified.elements();
+				result = (Enumeration) modified;
 			}
 		}
 		return result;
 	}
 	public String getHeader(String name) {
 		String result = super.getHeader(name);
-		if (ParamConsts.REMOVE_COMPRESSION_ACCEPT_ENCODING_HEADER_VALUES) {
+		if (KsWafFilter.REMOVE_COMPRESSION_ACCEPT_ENCODING_HEADER_VALUES) {
 			if (name != null && result != null && HEADER_ACCEPT_ENCODING.equalsIgnoreCase(name.trim())) {
 				result = removeCompressionEncodings(result);
 			}
@@ -360,10 +383,6 @@ public final class RequestWrapper extends HttpServletRequestWrapper {
 		if (value == null) return value;
 		return PATTERN_COMPRESSION_ENCODINGS.matcher(value).replaceAll("");
 	}
-
-
-
-
 
 
 }

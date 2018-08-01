@@ -7,8 +7,8 @@ import com.ks.parser.AbstractRelaxingHtmlParserWriter;
 import com.ks.pojo.FormFieldMaskingExcludeDefinition;
 import com.ks.pojo.WordDictionary;
 import com.ks.utils.*;
-import com.ks.wrapper.RequestWrapper;
-import com.ks.wrapper.ResponseWrapper;
+import com.ks.RequestWrapper;
+import com.ks.ResponseWrapper;
 
 import javax.crypto.Cipher;
 import javax.servlet.http.HttpSession;

@@ -1,5 +1,6 @@
 package com.ks.utils;
 
+import com.ks.KsWafFilter;
 import com.ks.container.RequestDefinitionContainer;
 import com.ks.crypto.CryptoKeyAndSalt;
 import com.ks.exceptions.ClientIpDeterminationException;
@@ -23,6 +24,9 @@ import java.util.regex.Pattern;
 
 public final class RequestUtils {
 
+	private RequestUtils() {}
+
+
 	private static final boolean DEBUG = false;
 
 
@@ -31,6 +35,8 @@ public final class RequestUtils {
 
 	private static final String SENSITIVE_VALUE_REMOVED = "<SENSITIVE-DATA-REMOVED>";
 	private static final String CLIENT_LOGGING_DISABLED = "<CLIENT-LOGGING-DISABLED>";
+
+	private static final String IMAGE_MAP_EXLUDE_EXPRESSION = "(?i).*(_(.y|.x){0,2}\\z)";
 
 
 
@@ -51,9 +57,9 @@ public final class RequestUtils {
 				final String result = clientIpDeterminator.determineClientIp(request);
 				return result != null ? result : request.getRemoteAddr();
 			} catch (ClientIpDeterminationException e) {
-				System.err.println("Unable to determine client IP: "+e.getMessage()); // TODO: besser im log loggen
+				System.err.println("Unable to determine client IP: "+e.getMessage());
 			} catch (RuntimeException e) {
-				System.err.println("Unable to determine client IP (RuntimeException): "+e.getMessage()); // TODO: besser im log loggen
+				System.err.println("Unable to determine client IP (RuntimeException): "+e.getMessage());
 			}
 		}
 		return request.getRemoteAddr();
@@ -63,8 +69,6 @@ public final class RequestUtils {
 	public static String extractSecurityRelevantRequestContent(final HttpServletRequest request, final String ip, final boolean logSessionValues, final Pattern sensitiveRequestParamNamePattern, final Pattern sensitiveRequestParamNameAndValueUrlPattern, final Pattern sensitiveValuePattern, final boolean logClientUserData) {
 		final StringBuilder logMessage = new StringBuilder();
 		try {
-//            long timer;
-//            timer = System.currentTimeMillis();
 			appendValueToMessage(logMessage, "client", logClientUserData?ip:CLIENT_LOGGING_DISABLED);
 			appendValueToMessage(logMessage, "date", ""+new Date());
 			appendValueToMessage(logMessage, "servletPath", request.getServletPath());
@@ -75,14 +79,6 @@ public final class RequestUtils {
 
 			final String queryString = removeSensitiveData(null,request.getQueryString(),sensitiveRequestParamNameMatcherToReuse,sensitiveRequestParamNameAndValueUrlMatcherToReuse,sensitiveValueMatcherToReuse);
 			appendValueToMessage(logMessage, "queryString (sensitive data removed)", queryString);
-            /* too slow
-            if (logDecodedAndTransformedVariants) {
-                final Permutation variants = ServerUtils.permutateVariants(queryString,true);
-                for (final Iterator iter = variants.iterator(); iter.hasNext();) {
-                    final String variant = (String) iter.next();
-                    if (!variant.equals(queryString)) appendValueToMessage(logMessage, "queryString (sensitive data removed + decoded and transformed variant)", variant);
-                }
-            }*/
 
 			appendValueToMessage(logMessage, "requestedSessionId", request.getRequestedSessionId());
 			appendValueToMessage(logMessage, "requestedSessionIdValid", ""+request.isRequestedSessionIdValid());
@@ -113,10 +109,8 @@ public final class RequestUtils {
 			appendValueToMessage(logMessage, "pathInfo", request.getPathInfo());
 			appendValueToMessage(logMessage, "pathTranslated", request.getPathTranslated());
 			appendValueToMessage(logMessage, "locale", ""+request.getLocale());
-//            if (SHOW_DETAIL_TIMINGS) System.out.println("Request details: "+(System.currentTimeMillis()-timer)+" ms");
 
 			// session stuff
-//            timer = System.currentTimeMillis();
 			final HttpSession session = request.getSession(false);
 			appendValueToMessage(logMessage, "hasSession", ""+(session != null));
 			if (session != null) {
@@ -140,10 +134,8 @@ public final class RequestUtils {
 					}
 				}
 			}
-//            if (SHOW_DETAIL_TIMINGS) System.out.println("Session details: "+(System.currentTimeMillis()-timer)+" ms");
 
 			// those methods are only availably in Java EE 1.4 or higher, so take care for older Java EE 1.3
-//            timer = System.currentTimeMillis();
 			if (!isOldJavaEE13) {
 				try {
 					appendValueToMessage(logMessage, "remotePort", ""+request.getRemotePort());
@@ -154,21 +146,19 @@ public final class RequestUtils {
 					isOldJavaEE13 = true;
 				}
 			}
-//            if (SHOW_DETAIL_TIMINGS) System.out.println("Java EE 1.4 details: "+(System.currentTimeMillis()-timer)+" ms");
 
 			// request parameters
 			{
-//                timer = System.currentTimeMillis();
 				final Enumeration names = request.getParameterNames();
 				if (names != null) {
 					while (names.hasMoreElements()) {
 						final String name = (String) names.nextElement();
 						final String[] values = request.getParameterValues(name);
 						if (values != null) {
-                            for (String value : values) {
-                                final String requestParam = removeSensitiveData(name, value, sensitiveRequestParamNameMatcherToReuse, sensitiveRequestParamNameAndValueUrlMatcherToReuse, sensitiveValueMatcherToReuse);
+							for (int i=0 ; i<values.length; i++) {
+								final String requestParam = removeSensitiveData(name,values[i],sensitiveRequestParamNameMatcherToReuse,sensitiveRequestParamNameAndValueUrlMatcherToReuse,sensitiveValueMatcherToReuse);
 
-                                appendValueToMessage(logMessage, "requestParam (sensitive data removed): " + name, requestParam);
+								appendValueToMessage(logMessage, "requestParam (sensitive data removed): "+name, requestParam);
                                 /* too slow
                                 if (logDecodedAndTransformedVariants) {
                                     final Permutation variants = ServerUtils.permutateVariants(requestParam,true);
@@ -179,25 +169,23 @@ public final class RequestUtils {
                                 }
                                  */
 
-                            }
+							}
 						}
 					}
 				} else {
 					System.err.println("This servlet-container does not allow the access of request params... VERY STRANGE");
 				}
-//                if (SHOW_DETAIL_TIMINGS) System.out.println("Parameter details: "+(System.currentTimeMillis()-timer)+" ms");
 			}
 
 			// HTTP headers
 			{
-//                timer = System.currentTimeMillis();
 				final Enumeration names = request.getHeaderNames();
 				if (names != null) {
 					while (names.hasMoreElements()) {
 						final String name = (String) names.nextElement();
 						if (!logClientUserData) {
 							final String nameLowercased = name.toLowerCase();
-							if (nameLowercased.contains("forward") || nameLowercased.indexOf("proxy") > -1 || nameLowercased.indexOf("client") > -1 || nameLowercased.indexOf("user") > -1) {
+							if (nameLowercased.contains("forward") || nameLowercased.contains("proxy") || nameLowercased.contains("client") || nameLowercased.contains("user")) {
 								appendValueToMessage(logMessage, "header: "+name, CLIENT_LOGGING_DISABLED);
 								continue; // to avoid logging it in clear text form
 							}
@@ -205,27 +193,16 @@ public final class RequestUtils {
 						for (final Enumeration values = request.getHeaders(name); values.hasMoreElements();) {
 							final String value = (String) values.nextElement();
 							appendValueToMessage(logMessage, "header: "+name, value);
-                            /* too slow
-                            if (logDecodedAndTransformedVariants) {
-                                final Permutation variants = ServerUtils.permutateVariants(value,true);
-                                for (final Iterator iter = variants.iterator(); iter.hasNext();) {
-                                    final String variant = (String) iter.next();
-                                    if (!variant.equals(value)) appendValueToMessage(logMessage, "header: "+name+" (decoded and transformed variant)", variant);
-                                }
-                            }
-                             */
 
 						}
 					}
 				} else {
 					System.err.println("This servlet-container does not allow the access of HTTP headers (unfortunately)");
 				}
-//                if (SHOW_DETAIL_TIMINGS) System.out.println("Header details: "+(System.currentTimeMillis()-timer)+" ms");
 			}
 
 			// Cookie values
 			{
-//                timer = System.currentTimeMillis();
 				final Cookie[] cookies = request.getCookies();
 				if (cookies != null) {
 					for (int i=0; i<cookies.length; i++) {
@@ -235,20 +212,10 @@ public final class RequestUtils {
 							final String value = cookie.getValue();
 
 							appendValueToMessage(logMessage, "cookie: "+name, value);
-                            /* too slow
-                            if (logDecodedAndTransformedVariants) {
-                                final Permutation variants = ServerUtils.permutateVariants(value,true);
-                                for (final Iterator iter = variants.iterator(); iter.hasNext();) {
-                                    final String variant = (String) iter.next();
-                                    if (!variant.equals(value)) appendValueToMessage(logMessage, "cookie: "+name+" (decoded and transformed variant)", variant);
-                                }
-                            }
-                             */
 
 						}
 					}
 				}
-//                if (SHOW_DETAIL_TIMINGS) System.out.println("Cookie details: "+(System.currentTimeMillis()-timer)+" ms");
 			}
 
 
@@ -265,55 +232,17 @@ public final class RequestUtils {
 	public static String printParameterMap(final Map/*<String,String[]>*/ parameterMap) {
 		if (parameterMap == null) return null;
 		final StringBuilder result = new StringBuilder();
-		for (final Iterator entries = parameterMap.entrySet().iterator(); entries.hasNext();) {
-			final Map.Entry entry = (Map.Entry) entries.next();
-			result.append(entry.getKey()).append("-->").append( Arrays.asList((Object[])entry.getValue()) ).append("   ");
+		for (Object o : parameterMap.entrySet()) {
+			final Map.Entry entry = (Map.Entry) o;
+			result.append(entry.getKey()).append("-->").append(Arrays.asList((Object[]) entry.getValue())).append("   ");
 		}
 		return result.toString();
 	}
 
 
 
-    /* OLD
-    public static String extractLearningModeRelevantRequestContent(final HttpServletRequest request, final String ip) {
-        final StringBuilder logMessage = new StringBuilder();
-        try {
-            appendValueToMessage(logMessage, "servletPath", request.getServletPath());
-            appendValueToMessage(logMessage, "requestURL", request.getRequestURL());
-            appendValueToMessage(logMessage, "requestURI", request.getRequestURI());
-            appendValueToMessage(logMessage, "method", request.getMethod());
-            appendValueToMessage(logMessage, "encoding", request.getCharacterEncoding());
-            {
-                final Enumeration names = request.getParameterNames();
-                if (names != null) {
-                    while (names.hasMoreElements()) {
-                        final String name = (String) names.nextElement();
-                        final String[] values = request.getParameterValues(name);
-                        if (values != null) {
-                            for (int i=0 ; i<values.length; i++) {
-                                appendValueToMessage(logMessage, "requestParam: "+name, values[i]);
 
-                            }
-                        }
-                    }
-                } else {
-                    System.err.println("This servlet-container does not allow the access of request params... VERY STRANGE");
-                }
-            }
-
-        } catch (Exception e) {
-            e.printStackTrace();
-            appendValueToMessage(logMessage, "Unable to create learning mode log message (unexpected exception during message creation)", e.getMessage());
-        }
-        return logMessage.toString();
-    }*/
-
-
-
-
-
-
-	public static final void changeKeysToUpperCaseAndUnifyValues(final Map/*<String,String[]>*/ map) {
+	private static void changeKeysToUpperCaseAndUnifyValues(final Map/*<String,String[]>*/ map) {
 		if (map == null) return;
 		final Map copy = new HashMap(map.size());
 		for (final Iterator iter = map.keySet().iterator(); iter.hasNext();) {
@@ -330,7 +259,7 @@ public final class RequestUtils {
 		map.putAll(copy);
 	}
 
-	public static final String[] combineArrays(final String[] leftPart, final String[] rightPart) {
+	private static String[] combineArrays(final String[] leftPart, final String[] rightPart) {
 		final String[] result = new String[leftPart.length+rightPart.length];
 		if (leftPart.length > 0) System.arraycopy(leftPart, 0, result, 0, leftPart.length);
 		if (rightPart.length > 0) System.arraycopy(rightPart, 0, result, leftPart.length, rightPart.length);
@@ -358,7 +287,7 @@ public final class RequestUtils {
 				headerMap.put(name, collectedValuesAsArray);
 			}
 		}
-		changeKeysToUpperCaseAndUnifyValues(headerMap); // TODO: evtl. optimieren: in einem step mit in der methode hier machen
+		changeKeysToUpperCaseAndUnifyValues(headerMap);
 		return headerMap;
 	}
 
@@ -384,7 +313,7 @@ public final class RequestUtils {
 		}
 		final Map result = convertMapOfListOfStrings2MapOfStringArray(cookieMap);
 		changeKeysToUpperCaseAndUnifyValues(result);
-		return result; // TODO: evtl. optimieren: in einem step mit in der methode hier machen
+		return result;
 	}
 
 
@@ -435,7 +364,6 @@ public final class RequestUtils {
 
 
 
-	// TODO: eher nach ServerUtils move, da nicht wirklich request-bezogen ??
 	public static String createOrRetrieveRandomTokenFromSession(final HttpSession session, final String sessionKey) {
 		return createOrRetrieveRandomTokenFromSession(session, sessionKey, -1, -1);
 	}
@@ -446,7 +374,6 @@ public final class RequestUtils {
 			else value = CryptoUtils.generateRandomToken(true);
 			session.setAttribute(sessionKey, value);
 		}
-		assert value != null;
 		return value;
 	}
 
@@ -474,10 +401,10 @@ public final class RequestUtils {
 	public static final class DecryptedQuerystring {
 		public String decryptedString = null;
 		public Boolean isFormSubmit = null;
-		Boolean resourceEndsWithSlash = null;
+		public Boolean resourceEndsWithSlash = null;
 		public Boolean isFormMultipart = null;
 		public Boolean wasManipulated = Boolean.FALSE;
-		//Java5 @Override
+
 		public String toString() {
 			return this.decryptedString;
 		}
@@ -486,20 +413,16 @@ public final class RequestUtils {
 	/**
 	 * returns null when the URL is not encrypted
 	 */
-	public static DecryptedQuerystring decryptQueryStringInServletPathWithQueryString(final String contextPath, final String servletPath, String servletPathWithQueryStringEncrypted, final String cryptoDetectionString, final CryptoKeyAndSalt key, final String uriRequested, final boolean isRequestHavingAdditionalParameters, final boolean isRequestMethodPOST, final boolean useFullPathForResourceToBeAccessedProtection, final boolean additionalFullOrMediumResourceRemoval) {
+	public static DecryptedQuerystring decryptQueryStringInServletPathWithQueryString(final String contextPath, final String servletPath, String servletPathWithQueryStringEncrypted, final String cryptoDetectionString, final CryptoKeyAndSalt key, final String uriRequested, final boolean isRequestHavingAdditionalParameters, final boolean isRequestMethodPOST, final boolean useFullPathForResourceToBeAccessedProtection, final boolean additionalFullOrMediumResourceRemoval, final boolean appendQuestionmarkOrAmpersandToLinks) {
 		if (servletPath == null || servletPathWithQueryStringEncrypted == null) return null;
-		if (contextPath == null) throw new IllegalArgumentException("contextPath must not be null"); // TODO oder doch nullable ?
-		if (cryptoDetectionString == null) throw new IllegalArgumentException("cryptoDetectionString must not be null"); // cryptoDetectionString is used to detect encrypted links
-		if (key == null) throw new IllegalArgumentException("key must not be null");
-		if (uriRequested == null) throw new IllegalArgumentException("uriRequested must not be null");
+		if (contextPath == null) throw new NullPointerException("contextPath must not be null");
+		if (cryptoDetectionString == null) throw new NullPointerException("cryptoDetectionString must not be null"); // cryptoDetectionString is used to detect encrypted links
+		if (key == null) throw new NullPointerException("key must not be null");
+		if (uriRequested == null) throw new NullPointerException("uriRequested must not be null");
 		final int firstQuestionMark = servletPathWithQueryStringEncrypted.indexOf('?');
 		if (firstQuestionMark > -1 && servletPathWithQueryStringEncrypted.length() > firstQuestionMark+1) {
 			try {
-// NOT REQUIRED ANYMORE, SINCE ALREADY THE BROWSER UNMAKS &amp; INTO & SO THAT NEVER ANY INCOMING REQUEST HAS A &amp; AS PARAMETER DELIMITER INSIDE ITS QUERY STRING
-//OLD                // normalize &amp; into &
-//OLD                servletPathWithQueryStringEncrypted = ServerUtils.unmaskAmpersandsInLink(servletPathWithQueryStringEncrypted);
-
-				if (servletPathWithQueryStringEncrypted.endsWith("&")) servletPathWithQueryStringEncrypted = servletPathWithQueryStringEncrypted.substring(0,servletPathWithQueryStringEncrypted.length()-1);
+				if (appendQuestionmarkOrAmpersandToLinks && servletPathWithQueryStringEncrypted.endsWith("&")) servletPathWithQueryStringEncrypted = servletPathWithQueryStringEncrypted.substring(0,servletPathWithQueryStringEncrypted.length()-1);
 				// remove the cryptoDetectionString
 				final int pos = servletPathWithQueryStringEncrypted.indexOf(cryptoDetectionString);
 				if (pos == -1) return null; // returns null when the URL is not encrypted
@@ -531,62 +454,55 @@ public final class RequestUtils {
 				// by the application and the requestedURI is also still %-encoded when a request is made. So comparing them makes very much sense since then we even detect mismatches in the given encoding as
 				// a potential spoofing automatically...
 				final String resourceToBeAccessed = ServerUtils.extractResourceToBeAccessed(uriRequested, contextPath, servletPath, useFullPathForResourceToBeAccessedProtection);
-//                System.out.println("resourceToBeAccessed="+resourceToBeAccessed);
-//                System.out.println("alreadyUnencryptedPrefix="+alreadyUnencryptedPrefix);
-//                System.out.println("alreadyUnencryptedPrefixWithParamsRemoved="+alreadyUnencryptedPrefixWithParamsRemoved);
-//                System.out.println("decrypt="+decrypt);
-//                System.out.println("alreadyUnencryptedSuffix="+alreadyUnencryptedSuffix);
-//                System.out.println("alreadyUnencryptedSuffixWithParamsRemoved="+alreadyUnencryptedSuffixWithParamsRemoved);
 
 				// decrypt the query-string
 				StringBuilder result = new StringBuilder(servletPathWithQueryStringEncrypted.length());
 				String decryptedQueryString = CryptoUtils.decryptURLSafe(decrypt, key);
 				if (DEBUG) System.out.println("decryptedQueryString: "+decryptedQueryString);
 				// extract the decrypted payload by removing the resource-to-be-accessed value and the request-type-get/post value (and double-checking it for security reasons)
-				int delimiterPos = decryptedQueryString.lastIndexOf(ParamConsts.INTERNAL_URL_DELIMITER);
+				int delimiterPos = decryptedQueryString.lastIndexOf(KsWafFilter.INTERNAL_URL_DELIMITER);
 				if (delimiterPos == -1 || delimiterPos == decryptedQueryString.length()-1) throw new ServerAttackException("Decrypted URL contains no matching flags");
 				final DecryptedQuerystring decryptedQuerystring = new DecryptedQuerystring();
 				// read flag for resourceEndsWithSlash form - and check for manual adding of parameters
 				final char resourceEndsWithSlashFlag = decryptedQueryString.charAt(delimiterPos+1);
 				final boolean resourceEndsWithSlash;
-				if (ParamConsts.INTERNAL_RESOURCE_ENDS_WITH_SLASH_YES_FLAG == resourceEndsWithSlashFlag) resourceEndsWithSlash = true;
-				else if (ParamConsts.INTERNAL_RESOURCE_ENDS_WITH_SLASH_NO_FLAG == resourceEndsWithSlashFlag) resourceEndsWithSlash = false;
+				if (KsWafFilter.INTERNAL_RESOURCE_ENDS_WITH_SLASH_YES_FLAG == resourceEndsWithSlashFlag) resourceEndsWithSlash = true;
+				else if (KsWafFilter.INTERNAL_RESOURCE_ENDS_WITH_SLASH_NO_FLAG == resourceEndsWithSlashFlag) resourceEndsWithSlash = false;
 				else throw new ServerAttackException("Decrypted URL contains unknown 'resource ends with slash' value: "+resourceEndsWithSlashFlag);
 				decryptedQuerystring.resourceEndsWithSlash = resourceEndsWithSlash;
 				// read flag for multipart form - and check for manual adding of parameters
-				delimiterPos = decryptedQueryString.lastIndexOf(ParamConsts.INTERNAL_URL_DELIMITER, delimiterPos-1);
+				delimiterPos = decryptedQueryString.lastIndexOf(KsWafFilter.INTERNAL_URL_DELIMITER, delimiterPos-1);
 				final char formMultipartFlag = decryptedQueryString.charAt(delimiterPos+1);
 				final boolean isFormMultipart;
-				if (ParamConsts.INTERNAL_MULTIPART_YES_FLAG == formMultipartFlag) isFormMultipart = true;
-				else if (ParamConsts.INTERNAL_MULTIPART_NO_FLAG == formMultipartFlag) isFormMultipart = false;
+				if (KsWafFilter.INTERNAL_MULTIPART_YES_FLAG == formMultipartFlag) isFormMultipart = true;
+				else if (KsWafFilter.INTERNAL_MULTIPART_NO_FLAG == formMultipartFlag) isFormMultipart = false;
 				else throw new ServerAttackException("Decrypted URL contains unknown 'form multipart' value: "+formMultipartFlag);
-				decryptedQuerystring.isFormMultipart = Boolean.valueOf(isFormMultipart);
+				decryptedQuerystring.isFormMultipart = isFormMultipart;
 				// read flag for form/link - and check for manual adding of parameters
-				delimiterPos = decryptedQueryString.lastIndexOf(ParamConsts.INTERNAL_URL_DELIMITER, delimiterPos-1);
+				delimiterPos = decryptedQueryString.lastIndexOf(KsWafFilter.INTERNAL_URL_DELIMITER, delimiterPos-1);
 				final char formLinkFlag = decryptedQueryString.charAt(delimiterPos+1);
 				final boolean isFormAction;
-				if (ParamConsts.INTERNAL_TYPE_FORM_FLAG == formLinkFlag) isFormAction = true;
-				else if (ParamConsts.INTERNAL_TYPE_LINK_FLAG == formLinkFlag) isFormAction = false;
+				if (KsWafFilter.INTERNAL_TYPE_FORM_FLAG == formLinkFlag) isFormAction = true;
+				else if (KsWafFilter.INTERNAL_TYPE_LINK_FLAG == formLinkFlag) isFormAction = false;
 				else throw new ServerAttackException("Decrypted URL contains unknown 'form/link' value: "+formLinkFlag);
-				decryptedQuerystring.isFormSubmit = Boolean.valueOf(isFormAction);
+				decryptedQuerystring.isFormSubmit = isFormAction;
 				if (isRequestHavingAdditionalParameters && !isFormAction) decryptedQuerystring.wasManipulated = Boolean.TRUE; // OLD throw new ServerAttackException("Encrypted request contains additional unencrypted parameters (it is not a form submit and strict parameter checking is enabled)");
 				// continue with double-checking the request method type (GET or POST)
-				delimiterPos = decryptedQueryString.lastIndexOf(ParamConsts.INTERNAL_URL_DELIMITER, delimiterPos-1);
+				delimiterPos = decryptedQueryString.lastIndexOf(KsWafFilter.INTERNAL_URL_DELIMITER, delimiterPos-1);
 				if (delimiterPos == -1 || delimiterPos == decryptedQueryString.length()-1) throw new ServerAttackException("Decrypted URL contains no 'resource-to-be-accessed' and/or 'request-type-get/post' and/or 'form/link' value");
 				final char flag = decryptedQueryString.charAt(delimiterPos+1);
-				if (flag != ParamConsts.INTERNAL_METHOD_TYPE_UNDEFINED) {
-					// TODO: den check hier per flag deaktivierbar machen
+				if (flag != KsWafFilter.INTERNAL_METHOD_TYPE_UNDEFINED) {
 					if (isRequestMethodPOST) {
 						// so the value in the decrypted URL must also be of type POST
-						if (flag != ParamConsts.INTERNAL_METHOD_TYPE_POST) throw new ServerAttackException("Decrypted URL contains mismatching 'request-type-get/post' value (expected POST)");
+						if (flag != KsWafFilter.INTERNAL_METHOD_TYPE_POST) throw new ServerAttackException("Decrypted URL contains mismatching 'request-type-get/post' value (expected POST)");
 					} else {
 						// so the value in the decrypted URL must also be of type GET
-						if (flag != ParamConsts.INTERNAL_METHOD_TYPE_GET) throw new ServerAttackException("Decrypted URL contains mismatching 'request-type-get/post' value (expected GET)");
+						if (flag != KsWafFilter.INTERNAL_METHOD_TYPE_GET) throw new ServerAttackException("Decrypted URL contains mismatching 'request-type-get/post' value (expected GET)");
 					}
 				}
 				// continue with double-checking the resource to be accessed
 				final int previousDelimiter = delimiterPos;
-				delimiterPos = decryptedQueryString.lastIndexOf(ParamConsts.INTERNAL_URL_DELIMITER, delimiterPos-1);
+				delimiterPos = decryptedQueryString.lastIndexOf(KsWafFilter.INTERNAL_URL_DELIMITER, delimiterPos-1);
 				if (delimiterPos == -1 || delimiterPos == decryptedQueryString.length()-1) throw new ServerAttackException("Decrypted URL contains no 'resource-to-be-accessed' and/or 'request-type-get/post' and/or 'form/link' value");
 				final String actualResourceToBeAccessed = decryptedQueryString.substring(delimiterPos+1, previousDelimiter);
 				if (!additionalFullOrMediumResourceRemoval) {
@@ -602,9 +518,6 @@ public final class RequestUtils {
 						} else if (resourceToBeAccessed.equals(actualResourceToBeAccessed+"/")) {
 							// it is a case where    expected=/demoapp/folder1/ vs. actual=/demoapp/folder1   and that's OK and allowed
 							mismatch = false;
-//old                        } else if (resourceToBeAccessed.equals(actualResourceToBeAccessed.replaceAll("/\\.","/"))) {
-//                            // it is a case where    expected=/demoapp/folder1/abc vs. actual=/demoapp/.folder1/abc    (don't ask why...)   CAN BE REMOVED LATER
-//                            mismatch = false;
 						}
 					}
 					if (mismatch) {
@@ -624,14 +537,13 @@ public final class RequestUtils {
 					if (actualResourceToBeAccessed.startsWith(contextPath)) {
 						result.append( actualResourceToBeAccessed.substring(contextPath.length()) );
 					} else result.append(actualResourceToBeAccessed);
-					if (decryptedQuerystring.resourceEndsWithSlash != null && decryptedQuerystring.resourceEndsWithSlash.booleanValue()) {
-						// hier einfach den parent entfernen (die nummer) und am ende ein slash hinter den resource name packen (echo zu echo/)
+					if (decryptedQuerystring.resourceEndsWithSlash != null && decryptedQuerystring.resourceEndsWithSlash) {
 						if (DEBUG) {
 							System.out.println("Intermediate result: "+result);
 							System.out.println("alreadyUnencryptedPrefixWithParamsRemoved: "+alreadyUnencryptedPrefixWithParamsRemoved);
 						}
 						if (alreadyUnencryptedPrefixWithParamsRemoved.charAt(alreadyUnencryptedPrefixWithParamsRemoved.length()-1) == '?') {
-							result.append(alreadyUnencryptedPrefixWithParamsRemoved.substring(0,alreadyUnencryptedPrefixWithParamsRemoved.length()-1));
+							result.append(alreadyUnencryptedPrefixWithParamsRemoved, 0, alreadyUnencryptedPrefixWithParamsRemoved.length()-1);
 						}
 					}
 					result.append("?");
@@ -639,29 +551,23 @@ public final class RequestUtils {
 					result.append(alreadyUnencryptedPrefixWithParamsRemoved);
 					if (DEBUG) System.out.println("alreadyUnencryptedPrefixWithParamsRemoved: "+alreadyUnencryptedPrefixWithParamsRemoved);
 				}
-				//if (result.toString().endsWith("..?")) result.insert(result.length()-1, "/");
 				if (DEBUG) System.out.println("Decrypted yet without querystring: "+result);
 				result.append(decryptedQueryString);
 				result.append(alreadyUnencryptedSuffixWithParamsRemoved);
 				if (anchor != null) result.append(anchor);
 				if (result.indexOf(cryptoDetectionString) > -1) throw new ServerAttackException("URL is encrypted multiple times (possible denial of service attack with endless decryption loop): "+result);
-
+				if (appendQuestionmarkOrAmpersandToLinks) {
+					if (result.charAt(result.length()-1) == '&' && result.length() > 1) {
+						// crop trailing &
+						result.deleteCharAt(result.length()-1);
+					}
+					// replace also && by & in result to be more compatible
+					result = new StringBuilder( result.toString().replaceAll("\\&\\&","&") );
+				}
 				if (DEBUG) System.out.println("result="+result);
 				decryptedQuerystring.decryptedString = result.toString();
 				return decryptedQuerystring;
-			} catch (IllegalBlockSizeException | InvalidKeyException e) {
-				if (DEBUG) e.printStackTrace();
-				throw new ServerAttackException("Unable to decrypt URL: "+e.getMessage());
-			} catch (NoSuchAlgorithmException e) {
-				if (DEBUG) e.printStackTrace();
-				throw new ServerAttackException("Unable to decrypt URL: "+e.getMessage());
-			} catch (BadPaddingException e) {
-				if (DEBUG) e.printStackTrace();
-				throw new ServerAttackException("Unable to decrypt URL: "+e.getMessage());
-			} catch (NoSuchPaddingException e) {
-				if (DEBUG) e.printStackTrace();
-				throw new ServerAttackException("Unable to decrypt URL: "+e.getMessage());
-			} catch (UnsupportedEncodingException e) {
+			} catch (IllegalBlockSizeException | UnsupportedEncodingException | NoSuchPaddingException | BadPaddingException | NoSuchAlgorithmException | InvalidKeyException e) {
 				if (DEBUG) e.printStackTrace();
 				throw new ServerAttackException("Unable to decrypt URL: "+e.getMessage());
 			} catch (ServerAttackException e) {
@@ -678,10 +584,8 @@ public final class RequestUtils {
 
 
 
-
-
 	public static boolean isMismatch(final List/*<String>*/ expectedValues, final String[] actualSubmittedValues) {
-		if (expectedValues == null) throw new IllegalArgumentException("expectedValues must not be null");
+		if (expectedValues == null) throw new NullPointerException("expectedValues must not be null");
 		if (actualSubmittedValues == null || actualSubmittedValues.length == 0) return true; //= yes, empty is counted as a mismatch
 		if (expectedValues.size() != actualSubmittedValues.length) return true;
 		for (int i=0; i<actualSubmittedValues.length; i++) {
@@ -690,11 +594,6 @@ public final class RequestUtils {
 			if (!wasThere) return true;
 		}
 		return !expectedValues.isEmpty();
-        /* OLD
-        final SortedSet/*<String>*~/ left = new TreeSet(expectedValues);
-        final SortedSet/*<String>*~/ right = new TreeSet( Arrays.asList(actualSubmittedValues) );
-        return !left.equals(right);
-        */
 	}
 
 
@@ -734,17 +633,6 @@ public final class RequestUtils {
 		logMessage.append("\t").append(key).append(" = ").append(value==null?"":value).append("\n");
 	}
 
-
-    /* OLD
-    private static String removeSensitiveData(final String name, final Object obj, final Pattern sensitiveRequestParamNamePattern, final Pattern sensitiveRequestParamNameAndValueUrlPattern, final Pattern sensitiveValuePattern) {
-        if (obj == null) return null;
-        String value = obj.toString();
-        if (name != null && sensitiveRequestParamNamePattern.matcher(name).find()) return SENSITIVE_VALUE_REMOVED;
-        value = sensitiveValuePattern.matcher(value).replaceAll(SENSITIVE_VALUE_REMOVED);
-        value = sensitiveRequestParamNameAndValueUrlPattern.matcher(value).replaceAll(SENSITIVE_VALUE_REMOVED);
-        return value;
-    }*/
-
 	private static String removeSensitiveData(final String name, final Object obj, final Matcher sensitiveRequestParamNameMatcherToReuse, final Matcher sensitiveRequestParamNameAndValueUrlMatcherToReuse, final Matcher sensitiveValueMatcherToReuse) {
 		if (obj == null) return null;
 		String value = obj.toString();
@@ -761,6 +649,45 @@ public final class RequestUtils {
 		return value;
 	}
 
+	/**
+	 * Filters the given requestParamterMap for Image Map indicators. These are _.x _.y as coordinates for the map.
+	 * This params would fire an attack, cause of not expected values in request.
+	 *
+	 * @param requestParamaterMap
+	 * @return cleaned Set of RequestParams
+	 */
+	public static Set filterRequestParameterMap(final Set requestParamaterMap) {
+		Set cleanedParamSet = new HashSet();
+
+		for (Object param : requestParamaterMap) {
+			if (param instanceof String) {
+				String newParam = (String) param;
+				if (newParam.matches(IMAGE_MAP_EXLUDE_EXPRESSION)) {
+					param = newParam.substring(0, newParam.length() - 2);
+				}
+			}
+			cleanedParamSet.add(param);
+		}
+
+		return cleanedParamSet;
+	}
+
+	/**
+	 * Checks a {@link ServletRequest} for it's session is active or timed out or may have deleted
+	 *
+	 * @param request current Request object
+	 * @return {@link Boolean} indicates Session is active
+	 */
+	public static boolean checkSessionIsActive(final ServletRequest request) {
+		boolean active = true;
+		if(request instanceof HttpServletRequest) {
+			HttpServletRequest httpRequest = (HttpServletRequest)request;
+			HttpSession session = httpRequest.getSession(false);
+			active = session != null && !session.isNew();
+		}
+		return active;
+	}
+
 
 
     /*
@@ -774,5 +701,6 @@ public final class RequestUtils {
         final String decrypted = decryptQueryStringInServletPathWithQueryString(encrypted, "1234567890", key, "/demo/test");
         System.out.println(decrypted);
     }*/
+
 
 }
