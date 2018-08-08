@@ -2669,21 +2669,7 @@ public final class KsWafFilter implements javax.servlet.Filter {
 			logLocal("Unable to destroy configuration during (re-)initialization", e);
 		}
 
-		final ConfigurationManager configManager;
-		try {
-			configManager = new ConfigurationManager(this.filterConfig);
-			logLocal("ConfigurationManager: "+configManager);
-		} catch (ClassNotFoundException e) {
-			throw new UnavailableException("Unable to initialize ConfigurationManager (caught ClassNotFoundException): "+e.getMessage());
-		} catch (InstantiationException e) {
-			throw new UnavailableException("Unable to initialize ConfigurationManager (caught InstantiationException): "+e.getMessage());
-		} catch (IllegalAccessException e) {
-			throw new UnavailableException("Unable to initialize ConfigurationManager (caught IllegalAccessException): "+e.getMessage());
-		} catch (FilterConfigurationException e) {
-			throw new UnavailableException("Unable to initialize ConfigurationManager (caught FilterConfigurationException): "+e.getMessage());
-		} catch (RuntimeException e) {
-			throw new UnavailableException("Unable to initialize ConfigurationManager (caught RuntimeException): "+e.getMessage());
-		}
+		final ConfigurationManager configManager = getConfigurationManager();
 		assert configManager != null;
 
 
@@ -4246,8 +4232,24 @@ public final class KsWafFilter implements javax.servlet.Filter {
 
 	}
 
-
-
+	private ConfigurationManager getConfigurationManager() throws UnavailableException {
+		final ConfigurationManager configManager;
+		try {
+			configManager = new ConfigurationManager(this.filterConfig);
+			logLocal("ConfigurationManager: "+configManager);
+		} catch (ClassNotFoundException e) {
+			throw new UnavailableException("Unable to initialize ConfigurationManager (caught ClassNotFoundException): "+e.getMessage());
+		} catch (InstantiationException e) {
+			throw new UnavailableException("Unable to initialize ConfigurationManager (caught InstantiationException): "+e.getMessage());
+		} catch (IllegalAccessException e) {
+			throw new UnavailableException("Unable to initialize ConfigurationManager (caught IllegalAccessException): "+e.getMessage());
+		} catch (FilterConfigurationException e) {
+			throw new UnavailableException("Unable to initialize ConfigurationManager (caught FilterConfigurationException): "+e.getMessage());
+		} catch (RuntimeException e) {
+			throw new UnavailableException("Unable to initialize ConfigurationManager (caught RuntimeException): "+e.getMessage());
+		}
+		return configManager;
+	}
 
 
 	private void sendProcessingError(final Throwable t, final HttpServletResponse response) {
@@ -4272,6 +4274,7 @@ public final class KsWafFilter implements javax.servlet.Filter {
 		} else {
 			exceptionReplyMessage = this.developmentConfigurationMissingReplyMessage;
 			exceptionReplyStatusCode = this.developmentConfigurationMissingReplyStatusCode;
+		}
 			if (exceptionMessage != null) exceptionDetails.append(exceptionMessage).append("\n");
 			// extract exception details
 			if (exception != null) {
@@ -4290,7 +4293,6 @@ public final class KsWafFilter implements javax.servlet.Filter {
 				}
 				exceptionDetails.append(sink.toString());
 			}
-		}
 		if (this.attackHandler != null) this.attackHandler.logWarningRequestMessage("Unable to initialize protection layer:\n\t"+exceptionDetails.toString().replaceAll("\n","\n\t"));
 		try {
 			if (!response.isCommitted()) {
@@ -4326,6 +4328,7 @@ public final class KsWafFilter implements javax.servlet.Filter {
 		} else {
 			exceptionReplyMessage = this.developmentExceptionReplyMessage;
 			exceptionReplyStatusCode = this.developmentExceptionReplyStatusCode;
+		}
 			if (exceptionMessage != null) exceptionDetails.append(exceptionMessage).append("\n");
 			// extract exception details
 			if (exception != null) {
@@ -4344,7 +4347,7 @@ public final class KsWafFilter implements javax.servlet.Filter {
 				}
 				exceptionDetails.append(sink.toString());
 			}
-		}
+
 		this.attackHandler.logWarningRequestMessage("Uncaught exception blocked:\n\t"+exceptionDetails.toString().replaceAll("\n","\n\t"));
 		try {
 			if (!response.isCommitted()) {
@@ -4381,13 +4384,11 @@ public final class KsWafFilter implements javax.servlet.Filter {
 		final String attackDetails;
 		// message and status-code settings
 		final String attackReplyMessage; final int attackReplyStatusCode;
-		// if we're in production mode set "attackDetails" to empty string
+		attackDetails = attack.getMessage();
 		if (this.isProductionMode) {
-			attackDetails = "";
 			attackReplyMessage = this.productionAttackReplyMessage;
 			attackReplyStatusCode = this.productionAttackReplyStatusCode;
 		} else {
-			attackDetails = attack.getMessage();
 			attackReplyMessage = this.developmentAttackReplyMessage;
 			attackReplyStatusCode = this.developmentAttackReplyStatusCode;
 		}
