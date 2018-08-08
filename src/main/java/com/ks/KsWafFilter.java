@@ -11,6 +11,9 @@ import com.ks.exceptions.FilterConfigurationException;
 import com.ks.exceptions.RuleLoadingException;
 import com.ks.exceptions.ServerAttackException;
 import com.ks.exceptions.StopFilterProcessingException;
+import com.ks.filter.FilterInitData;
+import com.ks.filter.handler.FilterInitHandler;
+import com.ks.filter.handler.BaseFilterInitHandler;
 import com.ks.loaders.RuleFileLoader;
 import com.ks.parser.MultipartRequestParser;
 import com.ks.pojo.*;
@@ -22,6 +25,7 @@ import com.ks.trackers.DenialOfServiceLimitTracker;
 import com.ks.trackers.HttpStatusCodeTracker;
 import com.ks.trackers.SessionCreationTracker;
 import com.ks.utils.*;
+import org.apache.commons.lang3.StringUtils;
 
 import javax.crypto.Cipher;
 import javax.servlet.*;
@@ -256,60 +260,60 @@ public final class KsWafFilter implements javax.servlet.Filter {
 	 * If this value is null, this filter instance is not currently
 	 * configured.
 	 */
-	private FilterConfig filterConfig;
+	public FilterConfig filterConfig;
 
-	private AttackHandler attackHandler;
-	private String developmentAttackReplyMessage, productionAttackReplyMessage, developmentConfigurationMissingReplyMessage, productionConfigurationMissingReplyMessage, developmentExceptionReplyMessage, productionExceptionReplyMessage, redirectWelcomePage, sessionTimeoutRedirectPage, requestCharacterEncoding;
-	private int developmentAttackReplyStatusCode=200, productionAttackReplyStatusCode=200, developmentConfigurationMissingReplyStatusCode=503, productionConfigurationMissingReplyStatusCode=503, developmentExceptionReplyStatusCode=503, productionExceptionReplyStatusCode=503, forcedSessionInvalidationPeriodMinutes, housekeepingIntervalMinutes, blockPeriodMinutes;
-	private long ruleFileReloadingIntervalMillis, nextRuleReloadingTime;
-	private long configReloadingIntervalMillis, nextConfigReloadingTime;
-	private int resetPeriodMinutesAttack, resetPeriodMinutesSessionCreation, resetPeriodMinutesBadResponseCode, resetPeriodMinutesRedirectThreshold;
-	private boolean debug, showTimings, catchAll, /*redefineSecretTokensOnSessionRenew, redefineParamAndFormTokensOnSessionRenew, redefineCryptoKeysOnSessionRenew,*/ forceEntranceThroughEntryPoints, tieSessionToClientAddress, blockResponseHeadersWithCRLF, blockFutureLastModifiedHeaders, blockInvalidLastModifiedHeaders, blockRequestsWithUnknownReferrer,blockRequestsWithMissingReferrer, blockRequestsWithDuplicateHeaders, blockNonLocalRedirects, blockInvalidEncodedQueryString, /*OLD isInsaneDecodingActivated,*/ useFullPathForResourceToBeAccessedProtection, additionalFullResourceRemoval, additionalMediumResourceRemoval, maskAmpersandsInLinkAdditions,
-			hiddenFormFieldProtection, selectboxProtection, checkboxProtection, radiobuttonProtection, selectboxValueMasking, checkboxValueMasking, radiobuttonValueMasking, reuseSessionContent, parseMultipartForms, hideInternalSessionAttributes,imageMapParameterExclude,
-			bufferFileUploadsToDisk, extraSessionTimeoutHandling;
-	private String[] tieSessionToHeaderList;
-	private Set/*<String>*/ antiCacheResponseHeaderInjectionContentTypes, responseBodyModificationContentTypes;
-	private HttpStatusCodeTracker httpStatusCodeCounter;
-	private SessionCreationTracker sessionCreationCounter;
-	private DenialOfServiceLimitTracker denialOfServiceLimitCounter;
-	private ClientIpDeterminator clientIpDeterminator;
-	private MultipartRequestParser multipartRequestParser;
-	private String applicationName, learningModeAggregationDirectory, clusterInitialContextFactory, clusterJmsProviderUrl, clusterJmsConnectionFactory, clusterJmsTopic;
-	private Class ruleFileLoaderClass, productionModeCheckerClass, clientIpDeterminatorClass, multipartRequestParserClass;
-	private boolean isProductionMode, logSessionValuesOnAttack, invalidateSessionOnAttack, logVerboseForDevelopmentMode, extraEncryptedValueHashProtection, rememberLastCaptchaForMultiSubmits, appendQuestionmarkOrAmpersandToLinks, appendSessionIdToLinks,  jmsUsed=false, flushResponse=true;
-	private boolean presentMultipartFormParametersAsRegularParametersToApplication, blockMultipartRequestsForNonMultipartForms, pdfXssProtection, applySetAfterWrite;
-	private int blockRepeatedRedirectsThreshold, failedCaptchaPerSessionAttackThreshold, clusterBroadcastPeriod;
-	private Pattern removeSensitiveDataRequestParamNamePattern, removeSensitiveDataValuePattern;
-	private String honeylinkPrefix, honeylinkSuffix;
-	private short honeylinkMaxPerPage;
-	private boolean randomizeHoneylinksOnEveryRequest;
-	private final Set/*<String>*/ allowedRequestMimeTypesLowerCased = new HashSet();
-
-
-	private boolean isHavingEnabledQueryStringCheckingRules = false, isHavingEnabledRequestParameterCheckingRules = false, isHavingEnabledHeaderCheckingRules = false, isHavingEnabledCookieCheckingRules = false;
-	private boolean validateClientAddressFormat = false;
-	private boolean transparentQuerystring = true, transparentForwarding = true;
+	public static AttackHandler attackHandler;
+	public static String developmentAttackReplyMessage, productionAttackReplyMessage, developmentConfigurationMissingReplyMessage, productionConfigurationMissingReplyMessage, developmentExceptionReplyMessage, productionExceptionReplyMessage, redirectWelcomePage, sessionTimeoutRedirectPage, requestCharacterEncoding;
+	public static int developmentAttackReplyStatusCode=200, productionAttackReplyStatusCode=200, developmentConfigurationMissingReplyStatusCode=503, productionConfigurationMissingReplyStatusCode=503, developmentExceptionReplyStatusCode=503, productionExceptionReplyStatusCode=503, forcedSessionInvalidationPeriodMinutes, housekeepingIntervalMinutes, blockPeriodMinutes;
+	public static long ruleFileReloadingIntervalMillis, nextRuleReloadingTime;
+	public static long configReloadingIntervalMillis, nextConfigReloadingTime;
+	public static int resetPeriodMinutesAttack, resetPeriodMinutesSessionCreation, resetPeriodMinutesBadResponseCode, resetPeriodMinutesRedirectThreshold;
+	public static Boolean debug, showTimings, catchAll, /*redefineSecretTokensOnSessionRenew, redefineParamAndFormTokensOnSessionRenew, redefineCryptoKeysOnSessionRenew,*/ forceEntranceThroughEntryPoints, tieSessionToClientAddress, blockResponseHeadersWithCRLF, blockFutureLastModifiedHeaders, blockInvalidLastModifiedHeaders, blockRequestsWithUnknownReferrer,blockRequestsWithMissingReferrer, blockRequestsWithDuplicateHeaders, blockNonLocalRedirects, blockInvalidEncodedQueryString, /*OLD isInsaneDecodingActivated,*/ useFullPathForResourceToBeAccessedProtection, additionalFullResourceRemoval, additionalMediumResourceRemoval, maskAmpersandsInLinkAdditions;
+	public static boolean hiddenFormFieldProtection, selectboxProtection, checkboxProtection, radiobuttonProtection, selectboxValueMasking, checkboxValueMasking, radiobuttonValueMasking, reuseSessionContent, parseMultipartForms, hideInternalSessionAttributes,imageMapParameterExclude,
+	bufferFileUploadsToDisk, extraSessionTimeoutHandling;
+	public static String[] tieSessionToHeaderList;
+	public static Set/*<String>*/ antiCacheResponseHeaderInjectionContentTypes, responseBodyModificationContentTypes;
+	public static HttpStatusCodeTracker httpStatusCodeCounter;
+	public SessionCreationTracker sessionCreationCounter;
+	public DenialOfServiceLimitTracker denialOfServiceLimitCounter;
+	public ClientIpDeterminator clientIpDeterminator;
+	public MultipartRequestParser multipartRequestParser;
+	public static String applicationName, learningModeAggregationDirectory, clusterInitialContextFactory, clusterJmsProviderUrl, clusterJmsConnectionFactory, clusterJmsTopic;
+	public static Class ruleFileLoaderClass, productionModeCheckerClass, clientIpDeterminatorClass, multipartRequestParserClass;
+	public static boolean isProductionMode, logSessionValuesOnAttack, invalidateSessionOnAttack, logVerboseForDevelopmentMode, extraEncryptedValueHashProtection, rememberLastCaptchaForMultiSubmits, appendQuestionmarkOrAmpersandToLinks, appendSessionIdToLinks,  jmsUsed=false, flushResponse=true;
+	public static boolean presentMultipartFormParametersAsRegularParametersToApplication, blockMultipartRequestsForNonMultipartForms, pdfXssProtection, applySetAfterWrite;
+	public static int blockRepeatedRedirectsThreshold, failedCaptchaPerSessionAttackThreshold, clusterBroadcastPeriod;
+	public static Pattern removeSensitiveDataRequestParamNamePattern, removeSensitiveDataValuePattern;
+	public static String honeylinkPrefix, honeylinkSuffix;
+	public static short honeylinkMaxPerPage;
+	public static boolean randomizeHoneylinksOnEveryRequest;
+	public static final Set/*<String>*/ allowedRequestMimeTypesLowerCased = new HashSet();
 
 
+	public boolean isHavingEnabledQueryStringCheckingRules = false, isHavingEnabledRequestParameterCheckingRules = false, isHavingEnabledHeaderCheckingRules = false, isHavingEnabledCookieCheckingRules = false;
+	public boolean validateClientAddressFormat = false;
+	public boolean transparentQuerystring = true, transparentForwarding = true;
 
-	private WhitelistRequestDefinitionContainer whiteListDefinitions; private boolean treatNonMatchingServletPathAsMatchForWhitelistRules;
-	private BadRequestDefinitionContainer badRequestDefinitions;
-	private DenialOfServiceLimitDefinitionContainer denialOfServiceLimitDefinitions;
-	private EntryPointDefinitionContainer entryPointDefinitions;
-	private OptimizationHintDefinitionContainer optimizationHintDefinitions;
-	private RenewSessionAndTokenPointDefinitionContainer renewSessionPointDefinitions;
-	private IncomingProtectionExcludeDefinitionContainer incomingProtectionExcludeDefinitions;
-	private ResponseModificationDefinitionContainer responseModificationDefinitions;
 
-	private TotalExcludeDefinitionContainer totalExcludeDefinitions;
-	private ContentModificationExcludeDefinitionContainer contentModificationExcludeDefinitions;
-	private SizeLimitDefinitionContainer sizeLimitDefinitions;
-	private MultipartSizeLimitDefinitionContainer multipartSizeLimitDefinitions;
-	private DecodingPermutationDefinitionContainer decodingPermutationDefinitions;
-	private FormFieldMaskingExcludeDefinitionContainer formFieldMaskingExcludeDefinitions;
 
-	private boolean restartCompletelyOnNextRequest = true; // initially true to load config on init()
-	private boolean reloadRulesOnNextRequest = false; // initially false (handled during config loading on init automatically)
+	public WhitelistRequestDefinitionContainer whiteListDefinitions; public boolean treatNonMatchingServletPathAsMatchForWhitelistRules;
+	public BadRequestDefinitionContainer badRequestDefinitions;
+	public DenialOfServiceLimitDefinitionContainer denialOfServiceLimitDefinitions;
+	public EntryPointDefinitionContainer entryPointDefinitions;
+	public OptimizationHintDefinitionContainer optimizationHintDefinitions;
+	public RenewSessionAndTokenPointDefinitionContainer renewSessionPointDefinitions;
+	public IncomingProtectionExcludeDefinitionContainer incomingProtectionExcludeDefinitions;
+	public ResponseModificationDefinitionContainer responseModificationDefinitions;
+
+	public TotalExcludeDefinitionContainer totalExcludeDefinitions;
+	public ContentModificationExcludeDefinitionContainer contentModificationExcludeDefinitions;
+	public SizeLimitDefinitionContainer sizeLimitDefinitions;
+	public MultipartSizeLimitDefinitionContainer multipartSizeLimitDefinitions;
+	public DecodingPermutationDefinitionContainer decodingPermutationDefinitions;
+	public FormFieldMaskingExcludeDefinitionContainer formFieldMaskingExcludeDefinitions;
+
+	public boolean restartCompletelyOnNextRequest = true; // initially true to load config on init()
+	public boolean reloadRulesOnNextRequest = false; // initially false (handled during config loading on init automatically)
 
 
 
@@ -2673,6 +2677,7 @@ public final class KsWafFilter implements javax.servlet.Filter {
 		assert configManager != null;
 
 
+
 		boolean initJMS = false; // might be set to true during initialization, which then indicates that we should init JMS (i.e. start listening) at the end of config loading (see below)
 
 		// LOAD THE "CONFIG-MISSING-STUFF" AT FIRST HERE IN CONFIG LOADING
@@ -2746,19 +2751,18 @@ public final class KsWafFilter implements javax.servlet.Filter {
 
 
 
-		// Load config: debug flag - OPTIONAL
+		// debug flag - OPTIONAL
 		{
 			String debugValue = configManager.getConfigurationValue(PARAM_DEBUG);
-			if (debugValue == null) debugValue = "false";
-			this.debug = (""+true).equals( debugValue.trim().toLowerCase() );
+			this.debug = StringUtils.isEmpty(debugValue) ? Boolean.FALSE : Boolean.valueOf(debugValue);
 		}
 
-		// Load config: timing flag - OPTIONAL
-		{
-			String value = configManager.getConfigurationValue(PARAM_SHOW_TIMINGS);
-			if (value == null) value = "false";
-			this.showTimings = (""+true).equals( value.trim().toLowerCase() );
+
+		for(FilterInitData filterInitData: FilterParams.FILTER_PARAMS){
+			FilterInitHandler handler = new BaseFilterInitHandler(filterInitData, filterConfig, configManager, this.debug);
 		}
+
+
 
 		// Load config: redirect welcome page - OPTIONAL
 		{

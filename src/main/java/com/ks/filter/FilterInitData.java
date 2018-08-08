@@ -1,25 +1,19 @@
 package com.ks.filter;
 
-import com.ks.config.ConfigurationManager;
+public class FilterInitData <T> {
 
-import javax.servlet.FilterConfig;
-
-public class FilterInitData {
-
-    private ConfigurationManager configurationManager;
-    private FilterConfig filterConfig;
     private String paramName;
     private String defaultValue;
-    private Object paramObject;
+    private T paramObject;
 
 
-    public ConfigurationManager getConfigurationManager() {
-        return configurationManager;
+    public FilterInitData(String paramName, String defaultValue, T paramObject) {
+        this.paramName = paramName;
+        this.defaultValue = defaultValue;
+        this.paramObject = paramObject;
     }
 
-    public void setConfigurationManager(ConfigurationManager configurationManager) {
-        this.configurationManager = configurationManager;
-    }
+
 
     public String getParamName() {
         return paramName;
@@ -41,7 +35,8 @@ public class FilterInitData {
         return paramObject;
     }
 
-    public void setParamObject(Object paramObject) {
+    public void setParamObject(T paramObject) {
         this.paramObject = paramObject;
     }
+
 }

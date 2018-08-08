@@ -1,26 +1,30 @@
 package com.ks.utils;
 
-import java.util.*;
+import com.ks.filter.FilterInitData;
+
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
+
+import static com.ks.KsWafFilter.*;
 
 
 public class FilterParams {
 
-    public static final Map<String, List<String>> FILTER_PARAMS;
+    public static final List<FilterInitData> FILTER_PARAMS;
 
      static {
-         Map<String, List<String>> aMap = new HashMap<>();
-         //[0] - Param value, [1] - Default param value
-         aMap.put("PARAM_DEBUG", Arrays.asList(new String[]{"Debug", "false"}));
-         aMap.put("PARAM_SHOW_TIMINGS", Arrays.asList(new String[]{"ShowTimings", "false"}));
-         aMap.put("PARAM_REDIRECT_WELCOME_PAGE", Arrays.asList(new String[]{"RedirectWelcomePage", ""}));
-         aMap.put("PARAM_SESSION_TIMEOUT_REDIRECT_PAGE", Arrays.asList(new String[]{"SessionTimeoutRedirectPage", ""}));
-         aMap.put("PARAM_CHARACTER_ENCODING", Arrays.asList(new String[]{"CharacterEncoding", "UTF-8"}));
-         aMap.put("PARAM_LOG_SESSION_VALUES_ON_ATTACK", Arrays.asList(new String[]{"LogSessionValuesOnAttack", "false"}));
-         aMap.put("PARAM_LEARNING_MODE_AGGREGATION_DIRECTORY", Arrays.asList(new String[]{"LearningModeAggregationDirectory", ""}));
-         aMap.put("PARAM_APPLICATION_NAME", Arrays.asList(new String[]{"ApplicationName", "DEFAULT"}));
-         aMap.put("PARAM_RULE_LOADER", Arrays.asList(new String[]{"RuleLoader", "com.ks.loaders.ClasspathZipRuleFileLoader"}));
-         aMap.put("PARAM_PRODUCTION_MODE_CHECKER", Arrays.asList(new String[]{"ProductionModeChecker", "com.ks.DefaultProductionModeChecker"}));
+         List<FilterInitData> aMap = new ArrayList<>();
+         aMap.add(new FilterInitData("ShowTimings", "false", showTimings));
+         aMap.add(new FilterInitData("RedirectWelcomePage", "", redirectWelcomePage));
+         aMap.add(new FilterInitData("SessionTimeoutRedirectPage", "", sessionTimeoutRedirectPage));
+         aMap.add(new FilterInitData("CharacterEncoding", "UTF-8", requestCharacterEncoding));
+         aMap.add(new FilterInitData("LogSessionValuesOnAttack", "false", logSessionValuesOnAttack));
+         aMap.add(new FilterInitData("LearningModeAggregationDirectory", "", learningModeAggregationDirectory));
+         aMap.add(new FilterInitData("ApplicationName", "DEFAULT", applicationName));
+         aMap.add(new FilterInitData("RuleLoader", "com.ks.loaders.ClasspathZipRuleFileLoader", ruleFileLoaderClass));
+         aMap.add(new FilterInitData("ProductionModeChecker", "com.ks.DefaultProductionModeChecker", productionModeCheckerClass));
 
-         FILTER_PARAMS = Collections.unmodifiableMap(aMap);
+         FILTER_PARAMS = Collections.unmodifiableList(aMap);
     }
 }
