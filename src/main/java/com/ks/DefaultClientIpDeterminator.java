@@ -5,17 +5,16 @@ import com.ks.exceptions.ClientIpDeterminationException;
 import com.ks.exceptions.FilterConfigurationException;
 import com.ks.pojo.interfaces.ClientIpDeterminator;
 import com.ks.utils.ConfigurationUtils;
+import org.apache.commons.lang3.StringUtils;
 
 import javax.servlet.FilterConfig;
 import javax.servlet.http.HttpServletRequest;
 
 public final class DefaultClientIpDeterminator implements ClientIpDeterminator {
 
-	public static final String PARAM_SPLIT_HEADER_VALUE = "DefaultClientIpDeterminatorSplitHeaderValue";
+	public static final String PARAM_SPLIT_HEADER_VALUE = "ClientIpDeterminatorSplitHeaderValue";
 
-	public static final String PARAM_HEADER_NAME = "DefaultClientIpDeterminatorHeaderName";
-
-	public static final String LEGACY_PARAM_HEADER_NAME = "ClientIpDetermination";
+	public static final String PARAM_HEADER_NAME = "ClientIpDetermination";
 
 
 	private boolean splitHeaderValue = false;
@@ -35,14 +34,11 @@ public final class DefaultClientIpDeterminator implements ClientIpDeterminator {
 		final ConfigurationManager configManager = ConfigurationUtils.createConfigurationManager(filterConfig);
 		{
 			String value = configManager.getConfigurationValue(PARAM_HEADER_NAME);
-			if (value == null) value = configManager.getConfigurationValue(LEGACY_PARAM_HEADER_NAME);
-			if (value == null) value = "";
-			this.headerName = value.trim();
+			this.headerName = StringUtils.isEmpty(value)? "" : value.trim();
 		}
 		{
 			String value = configManager.getConfigurationValue(PARAM_SPLIT_HEADER_VALUE);
-			if (value == null) value = ""+false;
-			this.splitHeaderValue = (""+true).equals( value.trim().toLowerCase() );
+			this.splitHeaderValue = StringUtils.isEmpty(value)? Boolean.FALSE:  Boolean.valueOf(value.trim());
 		}
 	}
 

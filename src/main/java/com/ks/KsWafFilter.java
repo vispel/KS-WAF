@@ -1,5 +1,4 @@
 package com.ks;
-
 import com.ks.attack.Attack;
 import com.ks.attack.AttackHandler;
 import com.ks.attack.AttackLogger;
@@ -11,9 +10,8 @@ import com.ks.exceptions.FilterConfigurationException;
 import com.ks.exceptions.RuleLoadingException;
 import com.ks.exceptions.ServerAttackException;
 import com.ks.exceptions.StopFilterProcessingException;
-import com.ks.filter.FilterInitData;
-import com.ks.filter.handler.FilterInitHandler;
-import com.ks.filter.handler.BaseFilterInitHandler;
+import com.ks.filter.handler.init.BaseFilterInitHandler;
+import com.ks.filter.handler.init.FilterInitHandler;
 import com.ks.loaders.RuleFileLoader;
 import com.ks.parser.MultipartRequestParser;
 import com.ks.pojo.*;
@@ -25,7 +23,6 @@ import com.ks.trackers.DenialOfServiceLimitTracker;
 import com.ks.trackers.HttpStatusCodeTracker;
 import com.ks.trackers.SessionCreationTracker;
 import com.ks.utils.*;
-import org.apache.commons.lang3.StringUtils;
 
 import javax.crypto.Cipher;
 import javax.servlet.*;
@@ -41,304 +38,132 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.regex.PatternSyntaxException;
 
-
-
-public final class KsWafFilter implements javax.servlet.Filter {
-
-
-
+public final class KsWafFilter implements javax.servlet.Filter, KsWafFilterParams {
 
 	public static final String DEFAULT_CHARACTER_ENCODING = "UTF-8";
-
-
-
-	private static final String PARAM_DEBUG = "Debug";
-	private static final String PARAM_SHOW_TIMINGS = "ShowTimings";
-	private static final String PARAM_BLOCK_ATTACKING_CLIENTS_THRESHOLD = "BlockAttackingClientsThreshold";
-
-	private static final String PARAM_DEV_ATTACK_REPLY_STATUS_CODE_OR_MESSAGE_RESOURCE = "DevelopmentAttackReplyStatusCodeOrMessageResource";
-	private static final String PARAM_PROD_ATTACK_REPLY_STATUS_CODE_OR_MESSAGE_RESOURCE = "ProductionAttackReplyStatusCodeOrMessageResource";
-	private static final String PARAM_DEV_EXCEPTION_REPLY_STATUS_CODE_OR_MESSAGE_RESOURCE = "DevelopmentExceptionReplyStatusCodeOrMessageResource";
-	private static final String PARAM_PROD_EXCEPTION_REPLY_STATUS_CODE_OR_MESSAGE_RESOURCE = "ProductionExceptionReplyStatusCodeOrMessageResource";
-	private static final String PARAM_DEV_CONFIG_MISSING_REPLY_STATUS_CODE_OR_MESSAGE_RESOURCE = "DevelopmentConfigurationMissingReplyStatusCodeOrMessageResource";
-	private static final String PARAM_PROD_CONFIG_MISSING_REPLY_STATUS_CODE_OR_MESSAGE_RESOURCE = "ProductionConfigurationMissingReplyStatusCodeOrMessageResource";
-
-	private static final String PARAM_FLUSH_RESPONSE = "FlushResponse";
-	private static final String PARAM_INVALIDATE_SESSION_ON_ATTACK = "InvalidateSessionOnAttack";
-	private static final String PARAM_TIE_WEB_SESSION_TO_CLIENT_ADDRESS = "TieWebSessionToClientAddress";
-	private static final String PARAM_TIE_WEB_SESSION_TO_HEADER_LIST = "TieWebSessionToHeaderList";
-	private static final String PARAM_BLOCK_RESPONSE_HEADERS_WITH_CRLF = "BlockResponseHeadersWithCRLF";
-	private static final String PARAM_BLOCK_FUTURE_LAST_MODIFIED_HEADERS = "BlockFutureLastModifiedResponseHeaders";
-	private static final String PARAM_BLOCK_INVALID_LAST_MODIFIED_HEADERS = "BlockInvalidLastModifiedResponseHeaders";
-	private static final String PARAM_BLOCK_REQUESTS_WITH_UNKNOWN_REFERRER = "BlockRequestsWithUnknownReferrer";
-	private static final String PARAM_BLOCK_REQUESTS_WITH_MISSING_REFERRER = "BlockRequestsWithMissingReferrer";
-	private static final String PARAM_BLOCK_REQUESTS_WITH_DUPLICATE_HEADERS = "BlockRequestsWithDuplicateHeaders";
-	private static final String PARAM_BLOCK_NON_LOCAL_REDIRECTS = "BlockNonLocalRedirects";
-	private static final String PARAM_400_OR_404_ATTACK_THRESHOLD = "HttpInvalidRequestOrNotFoundStatusCodeAttackThreshold";
-	private static final String PARAM_400_OR_404_ATTACK_THRESHOLD__CLUSTER_AWARE = "HttpInvalidRequestOrNotFoundStatusCodeClusterAware";
-	private static final String PARAM_SESSION_CREATION_ATTACK_THRESHOLD = "SessionCreationAttackThreshold";
-	private static final String PARAM_SESSION_CREATION_ATTACK_THRESHOLD__CLUSTER_AWARE = "SessionCreationClusterAware";
-
-	private static final String PARAM_SECRET_TOKEN_LINK_INJECTION = "SecretTokenLinkInjection";
-	private static final String PARAM_ENCRYPT_QUERY_STRINGS = "QueryStringEncryption";
-	private static final String PARAM_PARAMETER_AND_FORM_PROTECTION = "ParameterAndFormProtection";
-	private static final String PARAM_EXTRA_DISABLED_FORM_FIELD_PROTECTION = "ExtraDisabledFormFieldProtection";
-	private static final String PARAM_EXTRA_READONLY_FORM_FIELD_PROTECTION = "ExtraReadonlyFormFieldProtection";
-	private static final String PARAM_EXTRA_REQUEST_PARAM_VALUE_COUNT_PROTECTION = "ExtraRequestParamValueCountProtection";
-	private static final String PARAM_EXTRA_HIDDEN_FORM_FIELD_PROTECTION = "ExtraHiddenFormFieldProtection";
-	private static final String PARAM_EXTRA_SELECTBOX_PROTECTION = "ExtraSelectboxProtection";
-	private static final String PARAM_EXTRA_RADIOBUTTON_PROTECTION = "ExtraRadiobuttonProtection";
-	private static final String PARAM_EXTRA_CHECKBOX_PROTECTION = "ExtraCheckboxProtection";
-	private static final String PARAM_EXTRA_SELECTBOX_VALUE_MASKING = "ExtraSelectboxValueMasking";
-	private static final String PARAM_EXTRA_RADIOBUTTON_VALUE_MASKING = "ExtraRadiobuttonValueMasking";
-	private static final String PARAM_EXTRA_CHECKBOX_VALUE_MASKING = "ExtraCheckboxValueMasking";
-	private static final String PARAM_EXTRA_HASH_PROTECTION = "ExtraEncryptedValueHashProtection";
-	private static final String PARAM_EXTRA_FULL_PATH_PROTECTION = "ExtraEncryptedFullPathProtection";
-	private static final String PARAM_EXTRA_MEDIUM_PATH_REMOVAL = "ExtraEncryptedMediumPathRemoval";
-	private static final String PARAM_EXTRA_FULL_PATH_REMOVAL = "ExtraEncryptedFullPathRemoval";
-	private static final String PARAM_EXTRA_STRICT_PARAMETER_CHECKING_FOR_ENCRYPTED_LINKS = "ExtraStrictParameterCheckingForLinks";
-	private static final String PARAM_EXTRA_IMAGE_MAP_PARAMETER_EXCLUDE = "ExtraImageMapParameterExclude";
-	private static final String PARAM_EXTRA_SESSION_TIMEOUT_HANDLING = "ExtraSessionTimeoutHandling";
-	private static final String PARAM_SESSION_TIMEOUT_REDIRECT_PAGE = "SessionTimeoutRedirectPage";
-
-
-	private static final String PARAM_PATH_TO_BAD_REQUEST_FILES = "PathToBadRequestFiles";
-	private static final String PARAM_PATH_TO_WHITELIST_REQUESTS_FILES = "PathToWhitelistRequestFiles";
-	private static final String PARAM_PATH_TO_ENTRY_POINT_FILES = "PathToEntryPointFiles";
-	private static final String PARAM_PATH_TO_OPTIMIZATION_HINT_FILES = "PathToOptimizationHintFiles";
-	private static final String PARAM_PATH_TO_DOS_LIMIT_FILES = "PathToDenialOfServiceLimitFiles";
-	private static final String PARAM_PATH_TO_RENEW_SESSION_AND_TOKEN_POINT_FILES = "PathToRenewSessionAndTokenPointFiles";
-	private static final String PARAM_PATH_TO_CAPTCHA_POINT_FILES = "PathToCaptchaPointFiles";
-	private static final String PARAM_PATH_TO_INCOMING_PROTECTION_EXCLUDE_FILES = "PathToIncomingProtectionExcludeFiles";
-	private static final String PARAM_PATH_TO_RESPONSE_MODIFICATION_FILES = "PathToResponseModificationFiles"; // TODO: rename (legacy-safe) to link-patterns
-	private static final String PARAM_PATH_TO_CONTENT_MODIFICATION_EXCLUDE_FILES = "PathToContentModificationExcludeFiles";
-	private static final String PARAM_PATH_TO_TOTAL_EXCLUDE_FILES = "PathToTotalExcludeFiles";
-	private static final String PARAM_PATH_TO_SIZE_LIMIT_FILES = "PathToSizeLimitFiles";
-	private static final String PARAM_PATH_TO_MULTIPART_SIZE_LIMIT_FILES = "PathToMultipartSizeLimitFiles";
-	private static final String PARAM_PATH_TO_DECODING_PERMUTATION_FILES = "PathToDecodingPermutationFiles";
-	private static final String PARAM_PATH_TO_FORM_FIELD_MASKING_EXCLUDE_FILES = "PathToFormFieldMaskingExcludeFiles";
-
-	static final String RESPONSE_MODIFICATIONS_DEFAULT = "response-modifications";
-	static final String MODIFICATION_EXCLUDES_DEFAULT = "content-modification-excludes";
-
-	private static final String PARAM_MASK_AMPERSANDS_IN_LINK_ADDITIONS = "MaskAmpersandsInLinkAdditions";
-	private static final String PARAM_STRIP_HTML_COMMENTS = "StripHtmlComments";
-	private static final String PARAM_FORCED_SESSION_INVALIDATION_PERIOD_MINUTES = "ForcedSessionInvalidationPeriod";
-	private static final String PARAM_RULE_LOADER = "RuleLoader"; private static final String LEGACY_PARAM_RULE_FILE_LOADER = "RuleFileLoader";
-	private static final String PARAM_GEO_LOCATOR = "GeoLocator";
-	private static final String PARAM_ATTACK_LOGGER = "AttackLogger";
-	private static final String PARAM_PRODUCTION_MODE_CHECKER = "ProductionModeChecker";
-	private static final String PARAM_CLIENT_IP_DETERMINATOR = "ClientIpDeterminator";
-	private static final String PARAM_MULTIPART_REQUEST_PARSER = "MultipartRequestParser";
-	private static final String PARAM_BLOCK_ATTACKING_CLIENTS_DURATION = "BlockAttackingClientsDuration";
-	private static final String PARAM_RESET_PERIOD_ATTACK = "ResetPeriodAttack";
-	private static final String PARAM_RESET_PERIOD_SESSION_CREATION = "ResetPeriodSessionCreation";
-	private static final String PARAM_RESET_PERIOD_BAD_RESPONSE_CODE = "ResetPeriodBadResponseCode";
-	private static final String PARAM_RESET_PERIOD_REDIRECT_THRESHOLD = "ResetPeriodRedirectThreshold";
-	private static final String PARAM_HOUSEKEEPING_INTERVAL = "HousekeepingInterval";
-	private static final String PARAM_BLOCK_INVALID_ENCODED_QUERY_STRING = "BlockInvalidEncodedQueryString";
-	private static final String PARAM_APPLICATION_NAME = "ApplicationName";
-	private static final String PARAM_LEARNING_MODE_AGGREGATION_DIRECTORY = "LearningModeAggregationDirectory";
-	private static final String PARAM_LOG_SESSION_VALUES_ON_ATTACK = "LogSessionValuesOnAttack";
-	private static final String PARAM_RULE_RELOADING_INTERVAL = "RuleReloadingInterval"; private static final String LEGACY_PARAM_RULE_FILE_RELOADING_INTERVAL = "RuleFileReloadingInterval";
-	private static final String PARAM_CONFIG_RELOADING_INTERVAL = "ConfigurationReinitializationInterval";
-	private static final String PARAM_ANTI_CACHE_RESPONSE_HEADER_INJECTION_CONTENT_TYPES = "AntiCacheResponseHeaderInjectionContentTypes";
-	private static final String PARAM_RESPONSE_MODIFICATION_CONTENT_TYPES = "ResponseBodyModificationContentTypes";
-	private static final String PARAM_FORCE_ENTRANCE_THROUGH_ENTRY_POINTS = "ForceEntranceThroughEntryPoints";
-	private static final String PARAM_REDIRECT_WELCOME_PAGE = "RedirectWelcomePage";
-	private static final String PARAM_CHARACTER_ENCODING = "CharacterEncoding"; private static final String LEGACY_PARAM_CHARACTER_ENCODING = "RequestCharacterEncoding";
-	private static final String PARAM_HANDLE_UNCAUGHT_EXCEPTIONS = "HandleUncaughtExceptions";
-	private static final String PARAM_LOG_VERBOSE_FOR_DEVELOPMENT_MODE = "LogVerboseForDevelopmentMode";
-	private static final String PARAM_BLOCK_REPEATED_REDIRECTS_THRESHOLD = "BlockRepeatedRedirectsThreshold";
-	private static final String PARAM_REMOVE_SENSITIVE_DATA_REQUEST_PARAM_NAME_PATTERN = "RemoveSensitiveDataRequestParamNamePattern";
-	private static final String PARAM_REMOVE_SENSITIVE_DATA_VALUE_PATTERN = "RemoveSensitiveDataValuePattern";
-	private static final String PARAM_TREAT_NON_MATCHING_SERVLET_PATH_AS_MATCH_FOR_WHITELIST_RULES = "TreatNonMatchingServletPathAsMatchForWhitelistRules";
-	private static final String PARAM_REMEMBER_LAST_CAPTCHA_FOR_MULTI_SUBMITS = "RememberLastCaptchaForMultiSubmits";
-	private static final String PARAM_LOG_CLIENT_USER_DATA = "LogClientUserData";
-	private static final String PARAM_APPEND_QUESTIONMARK_OR_AMPERSAND_TO_LINKS = "AppendQuestionmarkOrAmpersandToLinks";
-	private static final String PARAM_APPEND_SESSIONID_TO_LINKS = "AppendSessionIdToLinks";
-	private static final String PARAM_FAILED_CAPTCHA_PER_SESSION_ATTACK_THRESHOLD = "FailedCaptchaPerSessionAttackThreshold";
-	private static final String PARAM_CLUSTER_INITIAL_CONTEXT_FACTORY = "ClusterInitialContextFactory";
-	private static final String PARAM_CLUSTER_BROADCAST_PERIOD = "ClusterBroadcastPeriod";
-	private static final String PARAM_CLUSTER_JMS_PROVIDER_URL = "ClusterJmsProviderUrl";
-	private static final String PARAM_CLUSTER_JMS_CONNECTION_FACTORY = "ClusterJmsConnectionFactory";
-	private static final String PARAM_CLUSTER_JMS_TOPIC = "ClusterJmsTopic";
-	private static final String PARAM_REUSE_SESSION_CONTENT = "ReuseSessionContent";
-	private static final String PARAM_PARSE_MULTI_PART_FORMS = "InspectMultipartFormSubmits"; // for forms that have file uploads.... also useful to prvent attackers from changing form enctype to multipart/form-data and then circumventing servlet filters
-	private static final String PARAM_PRESENT_MULTIPART_FORM_PARAMS_AS_REGULAR_PARAMS_TO_APPLICATION = "PresentMultipartFormParametersAsRegularParametersToApplication";
-	private static final String PARAM_HIDE_INTERNAL_SESSION_ATTRIBUTES = "HideInternalSessionAttributes";
-	private static final String PARAM_HONEYLINK_PREFIX = "HoneylinkPrefix";
-	private static final String PARAM_HONEYLINK_SUFFIX = "HoneylinkSuffix";
-	private static final String PARAM_HONEYLINK_MAX_PER_RESPONSE = "HoneylinkMaxPerResponse";
-	private static final String PARAM_RANDOMIZE_HONEYLINKS_ON_EVERY_RESPONSE = "HoneylinkRandomizeOnEveryResponse";
-	private static final String PARAM_PDF_XSS_PROTECTION = "PdfXssProtection";
-	private static final String PARAM_BLOCK_MULTIPART_REQUESTS_FOR_NON_MULTIPART_FORMS = "BlockMultipartRequestsForNonMultipartForms";
-	private static final String PARAM_ALLOWED_REQUEST_MIME_TYPES = "AllowedRequestMimeTypes";
-
-	private static final String PARAM_BUFFER_FILE_UPLOADS_TO_DISK = "BufferFileUploadsToDisk";
-	private static final String PARAM_APPLY_SET_AFTER_SESSION_WRITE = "ApplySetAfterSessionWrite";
-
-	private static final String PARAM_VALIDATE_CLIENT_ADDRESS_FORMAT = "ValidateClientAddressFormat";
-
-	private static final String PARAM_TRANSPARENT_QUERYSTRING = "TransparentQueryString"; private static final String LEGACY_PARAM_TRANSPARENT_QUERYSTRING = "TransparentQuerystring";
-	private static final String PARAM_TRANSPARENT_FORWARDING = "TransparentForwarding";
-
-
-
-	// tuning configs
-	private static final String PARAM_USE_TUNED_BLOCK_PARSER = "UseTunedBlockParser";
-	private static final String PARAM_USE_RESPONSE_BUFFERING = "UseResponseBuffering";
-
-
-
-
-
-
-	//    static final String INTERNAL_CONTENT_PREFIX = KsWafFilter.class.getName()+"_";
-	public static final String INTERNAL_CONTENT_PREFIX = "WC_";
-
-	public static final String SESSION_CLIENT_ADDRESS_KEY = INTERNAL_CONTENT_PREFIX+/*PARAM_TIE_WEB_SESSION_TO_CLIENT_ADDRESS*/1; //NOT RANDOM HERE TO ALLOW SHARED SESSIONS ACROSS APPS +CryptoUtils.generateRandomToken();
-	public static final String SESSION_CLIENT_HEADERS_KEY = INTERNAL_CONTENT_PREFIX+/*PARAM_TIE_WEB_SESSION_TO_HEADER_LIST*/2; //NOT RANDOM HERE TO ALLOW SHARED SESSIONS ACROSS APPS +CryptoUtils.generateRandomToken();
-	public static final String SESSION_SECRET_RANDOM_TOKEN_KEY_KEY = INTERNAL_CONTENT_PREFIX+/*PARAM_SECRET_TOKEN_LINK_INJECTION*/3+"-K"; //NOT RANDOM HERE TO ALLOW SHARED SESSIONS ACROSS APPS +CryptoUtils.generateRandomToken();
-	public static final String SESSION_SECRET_RANDOM_TOKEN_VALUE_KEY = INTERNAL_CONTENT_PREFIX+/*PARAM_SECRET_TOKEN_LINK_INJECTION*/4+"-V"; //NOT RANDOM HERE TO ALLOW SHARED SESSIONS ACROSS APPS +CryptoUtils.generateRandomToken();
-	public static final String SESSION_PARAMETER_AND_FORM_PROTECTION_RANDOM_TOKEN_KEY_KEY = INTERNAL_CONTENT_PREFIX+/*PARAM_PARAMETER_AND_FORM_PROTECTION*/5; //NOT RANDOM HERE TO ALLOW SHARED SESSIONS ACROSS APPS +CryptoUtils.generateRandomToken();
-	public static final String SESSION_ENCRYPT_QUERY_STRINGS_CRYPTODETECTION_KEY = INTERNAL_CONTENT_PREFIX+/*PARAM_ENCRYPT_QUERY_STRINGS*/6+"-CD"; //NOT RANDOM HERE TO ALLOW SHARED SESSIONS ACROSS APPS +CryptoUtils.generateRandomToken();
-	public static final String SESSION_ENCRYPT_QUERY_STRINGS_CRYPTOKEY_KEY = INTERNAL_CONTENT_PREFIX+/*PARAM_ENCRYPT_QUERY_STRINGS*/7+"-CK"; //NOT RANDOM HERE TO ALLOW SHARED SESSIONS ACROSS APPS +CryptoUtils.generateRandomToken();
-	public static final String SESSION_ENTRY_POINT_TOUCHED_KEY = INTERNAL_CONTENT_PREFIX+/*PARAM_FORCE_ENTRANCE_THROUGH_ENTRY_POINTS*/8+"-TD"; //NOT RANDOM HERE TO ALLOW SHARED SESSIONS ACROSS APPS +CryptoUtils.generateRandomToken();
-	public static final String SESSION_REUSABLE_KEY_LIST_KEY = INTERNAL_CONTENT_PREFIX+"SRKLK"; //NOT RANDOM HERE TO ALLOW SHARED SESSIONS ACROSS APPS +CryptoUtils.generateRandomToken();
-	public static final String SESSION_CAPTCHA_IMAGES = INTERNAL_CONTENT_PREFIX+"SCI-"; //NOT RANDOM HERE TO ALLOW SHARED SESSIONS ACROSS APPS +CryptoUtils.generateRandomToken();
-	public static final String SESSION_CAPTCHA_FAILED_COUNTER = INTERNAL_CONTENT_PREFIX+"SCFC-"; //NOT RANDOM HERE TO ALLOW SHARED SESSIONS ACROSS APPS +CryptoUtils.generateRandomToken();
-	public static final String SESSION_SELECTBOX_MASKING_PREFIX = INTERNAL_CONTENT_PREFIX+"SSMP-"; //NOT RANDOM HERE TO ALLOW SHARED SESSIONS ACROSS APPS +CryptoUtils.generateRandomToken();
-	public static final String SESSION_CHECKBOX_MASKING_PREFIX = INTERNAL_CONTENT_PREFIX+"SCMP-"; //NOT RANDOM HERE TO ALLOW SHARED SESSIONS ACROSS APPS +CryptoUtils.generateRandomToken();
-	public static final String SESSION_RADIOBUTTON_MASKING_PREFIX = INTERNAL_CONTENT_PREFIX+"SRMP-"; //NOT RANDOM HERE TO ALLOW SHARED SESSIONS ACROSS APPS +CryptoUtils.generateRandomToken();
-	public static final String SESSION_SESSION_WRAPPER_REFERENCE = INTERNAL_CONTENT_PREFIX+"SSWR-"; //NOT RANDOM HERE TO ALLOW SHARED SESSIONS ACROSS APPS +CryptoUtils.generateRandomToken();
-	public static final String REQUEST_NESTED_FORWARD_CALL = INTERNAL_CONTENT_PREFIX+"NF"; //NOT RANDOM HERE TO ALLOW SHARED SESSIONS ACROSS APPS +CryptoUtils.generateRandomToken();
-
-	public static final String REQUEST_ALREADY_DECRYPTED_FLAG = INTERNAL_CONTENT_PREFIX+"ALD"; //NOT RANDOM HERE TO ALLOW SHARED SESSIONS ACROSS APPS +CryptoUtils.generateRandomToken();
-	public static final String REQUEST_IS_FORM_SUBMIT_FLAG = INTERNAL_CONTENT_PREFIX+"FSF"; //NOT RANDOM HERE TO ALLOW SHARED SESSIONS ACROSS APPS +CryptoUtils.generateRandomToken();
-	public static final String REQUEST_IS_URL_MANIPULATED_FLAG = INTERNAL_CONTENT_PREFIX+"IUM"; //NOT RANDOM HERE TO ALLOW SHARED SESSIONS ACROSS APPS +CryptoUtils.generateRandomToken();
-
-
-
-	public static final char INTERNAL_URL_DELIMITER = '$'; // just something that is not part of regular URLs (the $ is reserved character and must be encoded in URIs itself and therefore safe to use)
-	public static final char INTERNAL_METHOD_TYPE_POST = '6'; // just something meaningless but unique
-	public static final char INTERNAL_METHOD_TYPE_GET = '3'; // just something meaningless but unique
-	public static final char INTERNAL_METHOD_TYPE_UNDEFINED = '4'; // just something meaningless but unique
-
-	// must be String for equals check
-	public static final String INTERNAL_TYPE_URL = "0"; // just something meaningless but unique
-	public static final String INTERNAL_TYPE_FORM = "1"; // just something meaningless but unique
-
-	// here as chars for something other
-	public static final char INTERNAL_TYPE_LINK_FLAG = '9'; // just something meaningless but unique
-	public static final char INTERNAL_TYPE_FORM_FLAG = '7'; // just something meaningless but unique
-
-	// here as chars for something other
-	public static final char INTERNAL_MULTIPART_YES_FLAG = '2'; // just something meaningless but unique
-	public static final char INTERNAL_MULTIPART_NO_FLAG = '5'; // just something meaningless but unique
-
-	// here as chars for something other
-	public static final char INTERNAL_RESOURCE_ENDS_WITH_SLASH_YES_FLAG = 'S'; // just something meaningless but unique
-	public static final char INTERNAL_RESOURCE_ENDS_WITH_SLASH_NO_FLAG = 'J'; // just something meaningless but unique
-
-	public static final int STATIC_REQUEST_CRYPTODETECTION_INSERTION_POSITION = CryptoUtils.generateRandomNumber(false, 0,150);
-
-
-
-	private static boolean isOldJavaEE13 = false;
-
-
-
-
-
-
-
-	private final ContentInjectionHelper contentInjectionHelper = new ContentInjectionHelper();
-
-	/**
-	 * The filter configuration object we are associated with.
-	 * If this value is null, this filter instance is not currently
-	 * configured.
-	 */
-	public FilterConfig filterConfig;
-
-	public static AttackHandler attackHandler;
-	public static String developmentAttackReplyMessage, productionAttackReplyMessage, developmentConfigurationMissingReplyMessage, productionConfigurationMissingReplyMessage, developmentExceptionReplyMessage, productionExceptionReplyMessage, redirectWelcomePage, sessionTimeoutRedirectPage, requestCharacterEncoding;
-	public static int developmentAttackReplyStatusCode=200, productionAttackReplyStatusCode=200, developmentConfigurationMissingReplyStatusCode=503, productionConfigurationMissingReplyStatusCode=503, developmentExceptionReplyStatusCode=503, productionExceptionReplyStatusCode=503, forcedSessionInvalidationPeriodMinutes, housekeepingIntervalMinutes, blockPeriodMinutes;
-	public static long ruleFileReloadingIntervalMillis, nextRuleReloadingTime;
-	public static long configReloadingIntervalMillis, nextConfigReloadingTime;
-	public static int resetPeriodMinutesAttack, resetPeriodMinutesSessionCreation, resetPeriodMinutesBadResponseCode, resetPeriodMinutesRedirectThreshold;
-	public static Boolean debug, showTimings, catchAll, /*redefineSecretTokensOnSessionRenew, redefineParamAndFormTokensOnSessionRenew, redefineCryptoKeysOnSessionRenew,*/ forceEntranceThroughEntryPoints, tieSessionToClientAddress, blockResponseHeadersWithCRLF, blockFutureLastModifiedHeaders, blockInvalidLastModifiedHeaders, blockRequestsWithUnknownReferrer,blockRequestsWithMissingReferrer, blockRequestsWithDuplicateHeaders, blockNonLocalRedirects, blockInvalidEncodedQueryString, /*OLD isInsaneDecodingActivated,*/ useFullPathForResourceToBeAccessedProtection, additionalFullResourceRemoval, additionalMediumResourceRemoval, maskAmpersandsInLinkAdditions;
-	public static boolean hiddenFormFieldProtection, selectboxProtection, checkboxProtection, radiobuttonProtection, selectboxValueMasking, checkboxValueMasking, radiobuttonValueMasking, reuseSessionContent, parseMultipartForms, hideInternalSessionAttributes,imageMapParameterExclude,
-	bufferFileUploadsToDisk, extraSessionTimeoutHandling;
-	public static String[] tieSessionToHeaderList;
-	public static Set/*<String>*/ antiCacheResponseHeaderInjectionContentTypes, responseBodyModificationContentTypes;
-	public static HttpStatusCodeTracker httpStatusCodeCounter;
-	public SessionCreationTracker sessionCreationCounter;
-	public DenialOfServiceLimitTracker denialOfServiceLimitCounter;
-	public ClientIpDeterminator clientIpDeterminator;
-	public MultipartRequestParser multipartRequestParser;
-	public static String applicationName, learningModeAggregationDirectory, clusterInitialContextFactory, clusterJmsProviderUrl, clusterJmsConnectionFactory, clusterJmsTopic;
-	public static Class ruleFileLoaderClass, productionModeCheckerClass, clientIpDeterminatorClass, multipartRequestParserClass;
-	public static boolean isProductionMode, logSessionValuesOnAttack, invalidateSessionOnAttack, logVerboseForDevelopmentMode, extraEncryptedValueHashProtection, rememberLastCaptchaForMultiSubmits, appendQuestionmarkOrAmpersandToLinks, appendSessionIdToLinks,  jmsUsed=false, flushResponse=true;
-	public static boolean presentMultipartFormParametersAsRegularParametersToApplication, blockMultipartRequestsForNonMultipartForms, pdfXssProtection, applySetAfterWrite;
-	public static int blockRepeatedRedirectsThreshold, failedCaptchaPerSessionAttackThreshold, clusterBroadcastPeriod;
-	public static Pattern removeSensitiveDataRequestParamNamePattern, removeSensitiveDataValuePattern;
-	public static String honeylinkPrefix, honeylinkSuffix;
-	public static short honeylinkMaxPerPage;
-	public static boolean randomizeHoneylinksOnEveryRequest;
-	public static final Set/*<String>*/ allowedRequestMimeTypesLowerCased = new HashSet();
-
-
-	public boolean isHavingEnabledQueryStringCheckingRules = false, isHavingEnabledRequestParameterCheckingRules = false, isHavingEnabledHeaderCheckingRules = false, isHavingEnabledCookieCheckingRules = false;
-	public boolean validateClientAddressFormat = false;
-	public boolean transparentQuerystring = true, transparentForwarding = true;
-
-
-
-	public WhitelistRequestDefinitionContainer whiteListDefinitions; public boolean treatNonMatchingServletPathAsMatchForWhitelistRules;
-	public BadRequestDefinitionContainer badRequestDefinitions;
-	public DenialOfServiceLimitDefinitionContainer denialOfServiceLimitDefinitions;
-	public EntryPointDefinitionContainer entryPointDefinitions;
-	public OptimizationHintDefinitionContainer optimizationHintDefinitions;
-	public RenewSessionAndTokenPointDefinitionContainer renewSessionPointDefinitions;
-	public IncomingProtectionExcludeDefinitionContainer incomingProtectionExcludeDefinitions;
-	public ResponseModificationDefinitionContainer responseModificationDefinitions;
-
-	public TotalExcludeDefinitionContainer totalExcludeDefinitions;
-	public ContentModificationExcludeDefinitionContainer contentModificationExcludeDefinitions;
-	public SizeLimitDefinitionContainer sizeLimitDefinitions;
-	public MultipartSizeLimitDefinitionContainer multipartSizeLimitDefinitions;
-	public DecodingPermutationDefinitionContainer decodingPermutationDefinitions;
-	public FormFieldMaskingExcludeDefinitionContainer formFieldMaskingExcludeDefinitions;
-
-	public boolean restartCompletelyOnNextRequest = true; // initially true to load config on init()
-	public boolean reloadRulesOnNextRequest = false; // initially false (handled during config loading on init automatically)
-
-
 
 	public KsWafFilter() {
 		System.out.println( Version.tagLine() );
 	}
 
+	private FilterConfig filterConfig;
+	private final ContentInjectionHelper contentInjectionHelper = new ContentInjectionHelper();
 
-
-	private static void concatenateParameterMaps(final Map/*<String,String[]>*/ parameters, final Map/*<String,String[]>*/ parameterMapToAdd) {
-		for (Object o : parameterMapToAdd.entrySet()) {
-			final Map.Entry/*<String,String[]>*/ entry = (Map.Entry) o;
-			final String key = (String) entry.getKey();
-			String[] value = (String[]) entry.getValue();
-			if (parameters.containsKey(key)) {
-				// append
-				final String[] originalValues = (String[]) parameters.get(key);
-				value = ServerUtils.concatenateArrays(value, originalValues); // use the values first, an let the original (submitted) values be appended !
-			}
-			parameters.put(key, value);
+	/**
+	 * Init method for this filter
+	 *
+	 */
+	public void init(final FilterConfig filterConfig) {
+		this.filterConfig = filterConfig;
+		try {
+			restartCompletelyWhenRequired();
+		} catch (Exception e) {
+			logLocal("Unable to initialize security filter", e);
 		}
 	}
 
 
+	private void restartCompletelyWhenRequired() throws UnavailableException {
+		if (this.restartCompletelyOnNextRequest) {
+			synchronized (this.mutex_restartCompletelyWhenRequired) {
+				if (this.restartCompletelyOnNextRequest) {
+					try {
+						checkRequirementsAndInitialize();
+						this.restartCompletelyOnNextRequest = false;
+						logLocal("Initialized protection layer");
+					} catch (RuntimeException | UnavailableException e) {
+						this.restartCompletelyOnNextRequest = true;
+						// when a full-restart failed, clean up any open stuff that might have been already initialized during first init try
+						// to have a clean beginning for the subsequent restart try
+						try { destroy(); } catch (Exception e2) { e2.printStackTrace(); }
+						e.printStackTrace();
+						throw e;
+					}
+				}
+			}
+		}
+	}
 
+	/**
+	 *
+	 * @param request The servlet request we are processing
+	 * @param chain The filter chain we are processing
+	 *
+	 * @exception IOException if an input/output error occurs
+	 * @exception ServletException if a servlet error occurs
+	 */
+	public void doFilter(final ServletRequest request, final ServletResponse response, final FilterChain chain) throws IOException, ServletException {
+		// check if total-exclude match:
+		if (this.totalExcludeDefinitions != null && this.totalExcludeDefinitions.hasEnabledDefinitions() && request instanceof HttpServletRequest) {
+			final HttpServletRequest httpRequest = (HttpServletRequest) request;
+			final String servletPath = httpRequest.getServletPath();
+			final String requestURI = httpRequest.getRequestURI();
+			if ( this.totalExcludeDefinitions.isTotalExclude(servletPath,requestURI) ) {
+				// TOTAL EXCLUDE: SO DON'T DO ANY SECURITY STUFF HERE, JUST LET THE REQUEST PASS - AT THE CUSTOMER'S OWN WILL AND RISK
+				chain.doFilter(request, response);
+				return;
+			}
+		}
+		// apply full security filter stuff (i.e. NO total-exclude):
+		if (this.catchAll) {
+			try {
+				internalDoFilter(request, response, chain);
+			} catch (Exception e) {
+				logLocal("Uncaught exception: "+e.getClass().getName()+": "+e.getMessage());
+				try {
+					sendUncaughtExceptionResponse((HttpServletResponse)response, e);
+				} catch (Exception e2) {
+					logLocal("Uncaught exception during return of exception message: "+e2.getClass().getName()+": "+e2.getMessage());
+				}
+			}
+		} else {
+			internalDoFilter(request, response, chain);
+		}
+	}
+
+	/**
+	 * Destroy method for this filter
+	 *
+	 */
+	public void destroy() {
+		if (this.httpStatusCodeCounter != null) {
+			try {
+				this.httpStatusCodeCounter.destroy();
+			} catch (Exception e) {
+				logLocal("Exception during destroy: "+e);
+			}
+		}
+		if (this.sessionCreationCounter != null) {
+			try {
+				this.sessionCreationCounter.destroy();
+			} catch (Exception e) {
+				logLocal("Exception during destroy: "+e);
+			}
+		}
+		if (this.denialOfServiceLimitCounter != null) {
+			try {
+				this.denialOfServiceLimitCounter.destroy();
+			} catch (Exception e) {
+				logLocal("Exception during destroy: "+e);
+			}
+		}
+		if (this.attackHandler != null) {
+			try {
+				/* this also destroys the ClientBlacklist which lives only inside of the AttackHandler as an implementation detail of the AttackHandler */
+				this.attackHandler.destroy();
+			} catch (Exception e) {
+				logLocal("Exception during destroy: "+e);
+			}
+		}
+
+		if (this.jmsUsed) try {
+			JmsUtils.closeQuietly(true);
+		} catch (Exception e) {
+			// log only (so that not found JMS classes when JMS is not used
+			logLocal("JMS utility not destroyed",e);
+		}
+		this.restartCompletelyOnNextRequest = true;
+	}
 
 
 	/**
@@ -1494,49 +1319,6 @@ public final class KsWafFilter implements javax.servlet.Filter {
 
 
 
-
-
-
-	/**
-	 *
-	 * @param request The servlet request we are processing
-	 * @param chain The filter chain we are processing
-	 *
-	 * @exception IOException if an input/output error occurs
-	 * @exception ServletException if a servlet error occurs
-	 */
-	public void doFilter(final ServletRequest request, final ServletResponse response, final FilterChain chain) throws IOException, ServletException {
-		// check if total-exclude match:
-		if (this.totalExcludeDefinitions != null && this.totalExcludeDefinitions.hasEnabledDefinitions() && request instanceof HttpServletRequest) {
-			final HttpServletRequest httpRequest = (HttpServletRequest) request;
-			final String servletPath = httpRequest.getServletPath();
-			final String requestURI = httpRequest.getRequestURI();
-			if ( this.totalExcludeDefinitions.isTotalExclude(servletPath,requestURI) ) {
-				// TOTAL EXCLUDE: SO DON'T DO ANY SECURITY STUFF HERE, JUST LET THE REQUEST PASS - AT THE CUSTOMER'S OWN WILL AND RISK
-				chain.doFilter(request, response); // TODO: log this total-exlucde access in the log-file for revision safeness !!
-				return;
-			}
-		}
-
-
-		// apply full security filter stuff (i.e. NO total-exclude):
-		if (this.catchAll) {
-			try {
-				internalDoFilter(request, response, chain);
-			} catch (Exception e) {
-				logLocal("Uncaught exception: "+e.getClass().getName()+": "+e.getMessage());
-				try {
-					sendUncaughtExceptionResponse((HttpServletResponse)response, e);
-				} catch (Exception e2) {
-					logLocal("Uncaught exception during return of exception message: "+e2.getClass().getName()+": "+e2.getMessage());
-				}
-			}
-		} else {
-			internalDoFilter(request, response, chain);
-		}
-	}
-
-
 	private void internalDoFilter(ServletRequest request, final ServletResponse response, final FilterChain chain) throws IOException, ServletException {
 		final long timerBefore = System.currentTimeMillis();
 
@@ -2064,8 +1846,7 @@ public final class KsWafFilter implements javax.servlet.Filter {
 							request.removeAttribute(REQUEST_NESTED_FORWARD_CALL); // = to let the filter work on that forwarded (i.e. nested) call too we simulate that this is not a nested (forwarded) call
 							// set the response character encoding to the same custom request character encoding (when defined) as this is a very special situation here: we're including/forwarding stuff....
 							if (this.requestCharacterEncoding != null && this.requestCharacterEncoding.length() > 0) {
-								if (isOldJavaEE13) response.setContentType("text/html; charset="+this.requestCharacterEncoding);
-								else response.setCharacterEncoding(this.requestCharacterEncoding);
+								response.setCharacterEncoding(this.requestCharacterEncoding);
 							}
 
 							// forward to the original unencrypted resource (not including since the include mechanism does not forward control to the resource, so that for example redirects and such originating from the included application logic will not work...
@@ -2176,16 +1957,6 @@ public final class KsWafFilter implements javax.servlet.Filter {
 		requestDetails.localPort = 0;
 		requestDetails.localAddr = "";
 		requestDetails.localName = "";
-		if (!KsWafFilter.isOldJavaEE13) {
-			try {
-				requestDetails.remotePort = httpRequest.getRemotePort();
-				requestDetails.localPort = httpRequest.getLocalPort();
-				requestDetails.localAddr = httpRequest.getLocalAddr();
-				requestDetails.localName = httpRequest.getLocalName();
-			} catch (NoSuchMethodError e) {
-				KsWafFilter.isOldJavaEE13 = true;
-			}
-		}
 
 		if (INTERNALLY_DUMP_REQUEST_PARAM_NAMES_VERBOSE && this.debug) logLocal("6: "+httpRequest.getParameterMap().keySet());
 		// remove temporarily injected parameters (from copied Map only, NOT from original request)
@@ -2447,18 +2218,11 @@ public final class KsWafFilter implements javax.servlet.Filter {
 
 
 
-
-
-
-
-
-
-
-
-
 	public void registerRuleReloadOnNextRequest() {
 		this.reloadRulesOnNextRequest = true;
 	}
+
+
 	private final Object mutex_reloadRulesOnNextRequest = new Object();
 	private void reloadRulesWhenRequired() throws RuleLoadingException {
 		if (this.reloadRulesOnNextRequest) {
@@ -2565,104 +2329,12 @@ public final class KsWafFilter implements javax.servlet.Filter {
 	}
 
 
-
-
-
-
-
-
 	public void registerConfigReloadOnNextRequest() {
 		this.restartCompletelyOnNextRequest = true;
 	}
+
+
 	private final Object mutex_restartCompletelyWhenRequired = new Object();
-	private void restartCompletelyWhenRequired() throws UnavailableException {
-		if (this.restartCompletelyOnNextRequest) {
-			synchronized (this.mutex_restartCompletelyWhenRequired) {
-				if (this.restartCompletelyOnNextRequest) {
-					try {
-						checkRequirementsAndInitialize();
-						this.restartCompletelyOnNextRequest = false;
-						logLocal("Initialized protection layer");
-					} catch (RuntimeException | UnavailableException e) {
-						this.restartCompletelyOnNextRequest = true;
-						// when a full-restart failed, clean up any open stuff that might have been already initialized during our first init try
-						// to have a clean beginning for the subsequent restart try
-						try { destroy(); } catch (Exception e2) { e2.printStackTrace(); }
-						e.printStackTrace();
-						throw e;
-					}
-				}
-			}
-		}
-	}
-
-
-
-
-
-
-
-
-
-
-	/**
-	 * Destroy method for this filter
-	 *
-	 */
-	public void destroy() {
-		if (this.httpStatusCodeCounter != null) {
-			try {
-				this.httpStatusCodeCounter.destroy();
-			} catch (Exception e) {
-				logLocal("Exception during destroy: "+e);
-			}
-		}
-		if (this.sessionCreationCounter != null) {
-			try {
-				this.sessionCreationCounter.destroy();
-			} catch (Exception e) {
-				logLocal("Exception during destroy: "+e);
-			}
-		}
-		if (this.denialOfServiceLimitCounter != null) {
-			try {
-				this.denialOfServiceLimitCounter.destroy();
-			} catch (Exception e) {
-				logLocal("Exception during destroy: "+e);
-			}
-		}
-		if (this.attackHandler != null) {
-			try {
-				this.attackHandler.destroy(); // = this also destroys the ClientBlacklist which lives only inside of the AttackHandler as an implementation detail of the AttackHandler
-			} catch (Exception e) {
-				logLocal("Exception during destroy: "+e);
-			}
-		}
-
-		if (this.jmsUsed) try {
-			JmsUtils.closeQuietly(true);
-		} catch (Exception e) {
-			// log only (so that not found JMS classes when JMS is not used don't make problems
-			logLocal("JMS utility not destroyed",e);
-		}
-		this.restartCompletelyOnNextRequest = true;
-	}
-
-
-	/**
-	 * Init method for this filter
-	 *
-	 */
-	public void init(final FilterConfig filterConfig) {
-		this.filterConfig = filterConfig;
-		try {
-			restartCompletelyWhenRequired();
-		} catch (Exception e) {
-			// not throwing the exception here in order to init the filter lazy (when the error condition is over and keep the app meanwhile blocked)
-			logLocal("Unable to initialize security filter", e);
-		}
-	}
-
 
 	private void checkRequirementsAndInitialize() throws UnavailableException {
 		if (this.filterConfig == null) throw new IllegalStateException("Filter mit be initialized via web container before 'init()' this method may be called");
@@ -2682,7 +2354,7 @@ public final class KsWafFilter implements javax.servlet.Filter {
 
 		// LOAD THE "CONFIG-MISSING-STUFF" AT FIRST HERE IN CONFIG LOADING
 
-		// Load config: Configuration missing reply HTTP status code or message resource [PROD] - OPTIONAL
+		//  Configuration missing reply HTTP status code or message resource [PROD] - OPTIONAL
 		{
 			String productionConfigurationMissingReplyConfigValue = configManager.getConfigurationValue(PARAM_PROD_CONFIG_MISSING_REPLY_STATUS_CODE_OR_MESSAGE_RESOURCE);
 			if (productionConfigurationMissingReplyConfigValue == null) productionConfigurationMissingReplyConfigValue = "503"; // we're using HTTP Status-Code 503 instead of a message file like "com/ks/missing.html" to be even safer
@@ -2710,7 +2382,7 @@ public final class KsWafFilter implements javax.servlet.Filter {
 			}
 		}
 
-		// Load config: Configuration missing reply HTTP status code or message resource [DEV] - OPTIONAL
+		//  Configuration missing reply HTTP status code or message resource [DEV] - OPTIONAL
 		{
 			String developmentConfigurationMissingReplyConfigValue = configManager.getConfigurationValue(PARAM_DEV_CONFIG_MISSING_REPLY_STATUS_CODE_OR_MESSAGE_RESOURCE);
 			if (developmentConfigurationMissingReplyConfigValue == null) developmentConfigurationMissingReplyConfigValue = "com/ks/missing.html";
@@ -2749,95 +2421,65 @@ public final class KsWafFilter implements javax.servlet.Filter {
 		// THE REGULAR STUFF STARTS HERE:
 
 
-
+		FilterInitHandler filterInitHandler = new BaseFilterInitHandler(filterConfig,configManager,Boolean.FALSE);
 
 		// debug flag - OPTIONAL
 		{
-			String debugValue = configManager.getConfigurationValue(PARAM_DEBUG);
-			this.debug = StringUtils.isEmpty(debugValue) ? Boolean.FALSE : Boolean.valueOf(debugValue);
+			this.debug = (Boolean) filterInitHandler.init(PARAM_DEBUG, Boolean.FALSE);
 		}
 
-
-		for(FilterInitData filterInitData: FilterParams.FILTER_PARAMS){
-			FilterInitHandler handler = new BaseFilterInitHandler(filterInitData, filterConfig, configManager, this.debug);
-		}
-
-
-
-		// Load config: redirect welcome page - OPTIONAL
+		// timing flag - OPTIONAL
 		{
-			String value = configManager.getConfigurationValue(PARAM_REDIRECT_WELCOME_PAGE);
-			if (value == null) value = "";
-			this.redirectWelcomePage = value.trim();
-			if (this.debug) logLocal("Redirect welcome page: "+this.redirectWelcomePage);
+			this.showTimings = (Boolean) filterInitHandler.init(PARAM_SHOW_TIMINGS, Boolean.FALSE);
 		}
 
-		// Load config: session timeout redirect page - OPTIONAL
+		// redirect welcome page - OPTIONAL
 		{
-			String value = configManager.getConfigurationValue(PARAM_SESSION_TIMEOUT_REDIRECT_PAGE);
-			if (value == null) value = "";
-			this.sessionTimeoutRedirectPage = value.trim();
-			if (this.debug) logLocal("Session Timeout Redirect page: "+this.sessionTimeoutRedirectPage);
+			this.redirectWelcomePage = (String) filterInitHandler.init(PARAM_REDIRECT_WELCOME_PAGE, this.redirectWelcomePage);
+		}
+
+		// session timeout redirect page - OPTIONAL
+		{
+			this.sessionTimeoutRedirectPage = (String) filterInitHandler.init(PARAM_SESSION_TIMEOUT_REDIRECT_PAGE, this.sessionTimeoutRedirectPage);
 		}
 
 
-		// Load config: request character encoding - OPTIONAL
+		//  request character encoding - OPTIONAL
 		{
-			String value = configManager.getConfigurationValue(PARAM_CHARACTER_ENCODING);
-			if (value == null) value = configManager.getConfigurationValue(LEGACY_PARAM_CHARACTER_ENCODING); // only for backwards-compatibility to old param name
-			if (value == null) value = DEFAULT_CHARACTER_ENCODING;
-			this.requestCharacterEncoding = value.trim();
-			if (this.debug) logLocal("Request character encoding: "+this.requestCharacterEncoding);
+			this.requestCharacterEncoding = (String) filterInitHandler.init(PARAM_CHARACTER_ENCODING, this.requestCharacterEncoding);
 		}
 
-		// Load config: log session values on attack - OPTIONAL
+		//  log session values on attack - OPTIONAL
 		{
-			String value = configManager.getConfigurationValue(PARAM_LOG_SESSION_VALUES_ON_ATTACK);
-			if (value == null) value = ""+false;
-			this.logSessionValuesOnAttack = (""+true).equals( value.trim().toLowerCase() );
+			this.logSessionValuesOnAttack = (Boolean) filterInitHandler.init(PARAM_LOG_SESSION_VALUES_ON_ATTACK, Boolean.FALSE);
 		}
 
-		// Load config: learning mode aggregation directory - OPTIONAL
+		//  learning mode aggregation directory - OPTIONAL
 		{
-			String value = configManager.getConfigurationValue(PARAM_LEARNING_MODE_AGGREGATION_DIRECTORY);
-			if (value == null) value = ""; // this default (empty) means here: no learning mode, not even through inherited logger
-			this.learningModeAggregationDirectory = value.trim();
-			if (this.debug) logLocal("Learning mode aggregation directory: "+this.learningModeAggregationDirectory);
+			this.learningModeAggregationDirectory = (String) filterInitHandler.init(PARAM_LEARNING_MODE_AGGREGATION_DIRECTORY, this.learningModeAggregationDirectory);
 		}
 
-		// Load config: application name - OPTIONAL
+		//  application name - OPTIONAL
 		{
-			String value = configManager.getConfigurationValue(PARAM_APPLICATION_NAME);
-			if (value == null) value = "DEFAULT";
-			this.applicationName = value.trim();
-			if (this.debug) logLocal("Application name: "+this.applicationName);
+			this.applicationName = (String) filterInitHandler.init(PARAM_APPLICATION_NAME, this.applicationName);
 		}
 
-		// Load config: rule-file-loader - OPTIONAL
+		//  rule-file-loader - OPTIONAL
 		{
-			String value = configManager.getConfigurationValue(PARAM_RULE_LOADER);
-			if (value == null) value = configManager.getConfigurationValue(LEGACY_PARAM_RULE_FILE_LOADER); // only for backwards-compatibility to old param name
-			if (value == null) value = "com.ks.loaders.ClasspathZipRuleFileLoader"; // = this implementation has defaults too so that it does not require any further mandatory init-params
-			value = value.trim();
-			if (value.length() == 0) throw new UnavailableException("Filter init-param is empty: "+PARAM_RULE_LOADER);
 			try {
-				this.ruleFileLoaderClass = Class.forName(value);
+				this.ruleFileLoaderClass = Class.forName("com.ks.loaders.ClasspathZipRuleFileLoader");
 			} catch (ClassNotFoundException e) {
-				throw new UnavailableException("Unable to find rule-file-loader class ("+value+"): "+e.getMessage());
+				throw new UnavailableException("Unable to find rule-file-loader class : "+e.getMessage());
 			}
 			assert this.ruleFileLoaderClass != null;
 		}
 
-		// Load config: production-mode-checker - OPTIONAL
+		// production-mode-checker - OPTIONAL
 		{
-			String value = configManager.getConfigurationValue(PARAM_PRODUCTION_MODE_CHECKER);
-			if (value == null) value = "com.ks.DefaultProductionModeChecker"; // = this checker has defaults too so that it does not require any further mandatory init-params
-			value = value.trim();
-			if (value.length() == 0) throw new UnavailableException("Filter init-param is empty: "+PARAM_PRODUCTION_MODE_CHECKER);
 			try {
-				this.productionModeCheckerClass = Class.forName(value);
+				this.productionModeCheckerClass = Class.forName("com.ks.DefaultProductionModeChecker");
 			} catch (ClassNotFoundException e) {
-				throw new UnavailableException("Unable to find production-mode-checker class ("+value+"): "+e.getMessage());
+				throw new UnavailableException("Unable to find production-mode-checker class: "+e.getMessage());
 			}
 			try {
 				assert this.productionModeCheckerClass != null;
@@ -2850,16 +2492,12 @@ public final class KsWafFilter implements javax.servlet.Filter {
 			}
 		}
 
-		// Load config: client-ip-determinator - OPTIONAL
+		// client-ip-determinator - OPTIONAL
 		{
-			String value = configManager.getConfigurationValue(PARAM_CLIENT_IP_DETERMINATOR);
-			if (value == null) value = "com.ks.DefaultClientIpDeterminator"; // = this determinator has defaults too so that it does not require any further mandatory init-params
-			value = value.trim();
-			if (value.length() == 0) throw new UnavailableException("Filter init-param is empty: "+PARAM_CLIENT_IP_DETERMINATOR);
 			try {
-				this.clientIpDeterminatorClass = Class.forName(value);
+				this.clientIpDeterminatorClass = Class.forName("com.ks.DefaultClientIpDeterminator");
 			} catch (ClassNotFoundException e) {
-				throw new UnavailableException("Unable to find client-ip-determinator class ("+value+"): "+e.getMessage());
+				throw new UnavailableException("Unable to find client-ip-determinator class: "+e.getMessage());
 			}
 			try {
 				assert this.clientIpDeterminatorClass != null;
@@ -2870,16 +2508,12 @@ public final class KsWafFilter implements javax.servlet.Filter {
 			}
 		}
 
-		// Load config: multipart-request-parser - OPTIONAL
+		//  multipart-request-parser - OPTIONAL
 		{
-			String value = configManager.getConfigurationValue(PARAM_MULTIPART_REQUEST_PARSER);
-			if (value == null) value = "com.ks.DefaultMultipartRequestParser"; // = this parser has defaults too so that it does not require any further mandatory init-params
-			value = value.trim();
-			if (value.length() == 0) throw new UnavailableException("Filter init-param is empty: "+PARAM_MULTIPART_REQUEST_PARSER);
 			try {
-				this.multipartRequestParserClass = Class.forName(value);
+				this.multipartRequestParserClass = Class.forName("com.ks.DefaultMultipartRequestParser");
 			} catch (ClassNotFoundException e) {
-				throw new UnavailableException("Unable to find multipart-request-parser class ("+value+"): "+e.getMessage());
+				throw new UnavailableException("Unable to find multipart-request-parser class : "+e.getMessage());
 			}
 			try {
 				assert this.multipartRequestParserClass != null;
@@ -2890,79 +2524,39 @@ public final class KsWafFilter implements javax.servlet.Filter {
 			}
 		}
 
-		// Load config: failed captcha per session attack threshold - OPTIONAL
+		// cluster JMS broadcast period - OPTIONAL
 		{
-			String value = configManager.getConfigurationValue(PARAM_FAILED_CAPTCHA_PER_SESSION_ATTACK_THRESHOLD);
-			if (value == null) value = "30";
-			try {
-				this.failedCaptchaPerSessionAttackThreshold = Integer.parseInt(value.trim());
-				if (this.failedCaptchaPerSessionAttackThreshold < 0) throw new UnavailableException("Configured failed captcha per session attack threshold must not be negative: "+value);
-			} catch(NumberFormatException e) {
-				throw new UnavailableException("Unable to number-parse configured 'failed captcha per session attack threshold': "+value);
-			}
-			if (this.debug) logLocal("Failed captcha per session attack threshold: "+this.failedCaptchaPerSessionAttackThreshold);
+			this.clusterBroadcastPeriod = (Integer) filterInitHandler.init(PARAM_CLUSTER_BROADCAST_PERIOD, this.clusterBroadcastPeriod);
+		}
+		// cluster initial context factory - OPTIONAL
+		{
+			this.clusterInitialContextFactory = (String) filterInitHandler.init(PARAM_CLUSTER_INITIAL_CONTEXT_FACTORY, this.clusterInitialContextFactory);
+		}
+		// cluster JMS provider URL - OPTIONAL
+		{
+			this.clusterJmsProviderUrl = (String) filterInitHandler.init(PARAM_CLUSTER_JMS_PROVIDER_URL, this.clusterJmsProviderUrl);
+		}
+		//  cluster JMS connection factory - OPTIONAL
+		{
+			this.clusterJmsConnectionFactory = (String) filterInitHandler.init(PARAM_CLUSTER_JMS_CONNECTION_FACTORY, this.clusterJmsConnectionFactory);
+		}
+		//  cluster JMS topic - OPTIONAL
+		{
+			this.clusterJmsTopic = (String) filterInitHandler.init(PARAM_CLUSTER_JMS_TOPIC, this.clusterJmsTopic);
 		}
 
-		// Load config: cluster JMS broadcast period - OPTIONAL
+		//  housekeeping interval minutes - OPTIONAL
 		{
-			String value = configManager.getConfigurationValue(PARAM_CLUSTER_BROADCAST_PERIOD);
-			if (value == null) value = "60";
-			try {
-				this.clusterBroadcastPeriod = Integer.parseInt(value.trim());
-				if (this.clusterBroadcastPeriod < 0) throw new UnavailableException("Configured cluster JMS broadcast period must not be negative: "+value);
-			} catch(NumberFormatException e) {
-				throw new UnavailableException("Unable to number-parse configured 'cluster JMS broadcast period': "+value);
-			}
-			if (this.debug) logLocal("Cluster JMS broadcast period: "+this.clusterBroadcastPeriod);
-		}
-		// Load config: cluster initial context factory - OPTIONAL
-		{
-			String value = configManager.getConfigurationValue(PARAM_CLUSTER_INITIAL_CONTEXT_FACTORY);
-			if (value == null) value = "";
-			this.clusterInitialContextFactory = value.trim();
-			if (this.debug) logLocal("Cluster initial context factory: "+value);
-		}
-		// Load config: cluster JMS provider URL - OPTIONAL
-		{
-			String value = configManager.getConfigurationValue(PARAM_CLUSTER_JMS_PROVIDER_URL); // z.B. tcp://localhost:3035/
-			if (value == null) value = "";
-			this.clusterJmsProviderUrl = value.trim();
-			if (this.debug) logLocal("Cluster JMS provider URL: "+value);
-		}
-		// Load config: cluster JMS connection factory - OPTIONAL
-		{
-			String value = configManager.getConfigurationValue(PARAM_CLUSTER_JMS_CONNECTION_FACTORY);
-			if (value == null) value = "";
-			this.clusterJmsConnectionFactory = value.trim();
-			if (this.debug) logLocal("Cluster JMS connection factory: "+value);
-		}
-		// Load config: cluster JMS topic - OPTIONAL
-		{
-			String value = configManager.getConfigurationValue(PARAM_CLUSTER_JMS_TOPIC);
-			if (value == null) value = "";
-			this.clusterJmsTopic = value.trim();
-			if (this.debug) logLocal("Cluster JMS topic: "+value);
+			this.housekeepingIntervalMinutes = (Integer) filterInitHandler.init(PARAM_HOUSEKEEPING_INTERVAL, this.housekeepingIntervalMinutes);
 		}
 
-		// Load config: housekeeping interval minutes - OPTIONAL
-		{
-			String value = configManager.getConfigurationValue(PARAM_HOUSEKEEPING_INTERVAL);
-			if (value == null) value = "15";
-			try {
-				this.housekeepingIntervalMinutes = Integer.parseInt(value.trim());
-			} catch(NumberFormatException e) {
-				throw new UnavailableException("Unable to number-parse configured 'housekeeping interval': "+value);
-			}
-			if (this.debug) logLocal("Housekeeping interval minutes: "+this.housekeepingIntervalMinutes);
-		}
-
-		// Load config: rule reloading interval minutes - OPTIONAL
+		//  rule reloading interval minutes - OPTIONAL
 		{
 			String value = configManager.getConfigurationValue(PARAM_RULE_RELOADING_INTERVAL);
 			if (value == null) value = configManager.getConfigurationValue(LEGACY_PARAM_RULE_FILE_RELOADING_INTERVAL); // only for backwards-compatibility to old param name
 			if (value == null) value = "0"; // defaults to 0 to disable rule reloading (for security reasons)
 			try {
-				this.ruleFileReloadingIntervalMillis = Integer.parseInt(value.trim()) * 60 * 1000;
+				this.ruleFileReloadingIntervalMillis = Long.valueOf(Integer.parseInt(value.trim()) * 60 * 1000);
 				if (this.ruleFileReloadingIntervalMillis > 0) {
 					this.nextRuleReloadingTime = System.currentTimeMillis() + this.ruleFileReloadingIntervalMillis;
 				}
@@ -2972,12 +2566,12 @@ public final class KsWafFilter implements javax.servlet.Filter {
 			if (this.debug) logLocal("Rule reloading interval minutes: "+value);
 		}
 
-		// Load config: config reloading interval minutes - OPTIONAL
+		//  config reloading interval minutes - OPTIONAL
 		{
 			String value = configManager.getConfigurationValue(PARAM_CONFIG_RELOADING_INTERVAL);
 			if (value == null) value = "0"; // defaults to 0 to disable config reloading (for security reasons)
 			try {
-				this.configReloadingIntervalMillis = Integer.parseInt(value.trim()) * 60 * 1000;
+				this.configReloadingIntervalMillis = Integer.valueOf(value.trim()) * 60 * 1000;
 				if (this.configReloadingIntervalMillis > 0) {
 					this.nextConfigReloadingTime = System.currentTimeMillis() + this.configReloadingIntervalMillis;
 				}
@@ -2987,101 +2581,49 @@ public final class KsWafFilter implements javax.servlet.Filter {
 			if (this.debug) logLocal("Config reloading interval minutes: "+value);
 		}
 
-		// Load config: block period minutes - OPTIONAL
+		//  block period minutes - OPTIONAL
 		{
-			String value = configManager.getConfigurationValue(PARAM_BLOCK_ATTACKING_CLIENTS_DURATION);
-			if (value == null) value = "20";
-			try {
-				this.blockPeriodMinutes = Integer.parseInt(value.trim());
-			} catch(NumberFormatException e) {
-				throw new UnavailableException("Unable to number-parse configured 'block period minutes': "+value);
-			}
-			if (this.debug) logLocal("Block period minutes: "+this.blockPeriodMinutes);
+			this.blockPeriodMinutes = (Integer) filterInitHandler.init(PARAM_BLOCK_ATTACKING_CLIENTS_DURATION, this.blockPeriodMinutes);
 		}
 
-		// Load config: reset period minutes (attack) - OPTIONAL
+		//  reset period minutes (attack) - OPTIONAL
 		{
-			String value = configManager.getConfigurationValue(PARAM_RESET_PERIOD_ATTACK);
-			if (value == null) value = "10";
-			try {
-				this.resetPeriodMinutesAttack = Integer.parseInt(value.trim());
-			} catch(NumberFormatException e) {
-				throw new UnavailableException("Unable to number-parse configured 'reset period minutes (attack)': "+value);
-			}
-			if (this.debug) logLocal("Reset period minutes (attack): "+value);
+			this.resetPeriodMinutesAttack = (Integer) filterInitHandler.init(PARAM_RESET_PERIOD_ATTACK, this.resetPeriodMinutesAttack);
 		}
-		// Load config: reset period minutes (session creation) - OPTIONAL
+		//  reset period minutes (session creation) - OPTIONAL
 		{
-			String value = configManager.getConfigurationValue(PARAM_RESET_PERIOD_SESSION_CREATION);
-			if (value == null) value = "5";
-			try {
-				this.resetPeriodMinutesSessionCreation = Integer.parseInt(value.trim());
-			} catch(NumberFormatException e) {
-				throw new UnavailableException("Unable to number-parse configured 'reset period minutes (session creation)': "+value);
-			}
-			if (this.debug) logLocal("Reset period minutes (session creation): "+value);
+			this.resetPeriodMinutesSessionCreation = (Integer) filterInitHandler.init(PARAM_RESET_PERIOD_SESSION_CREATION, this.resetPeriodMinutesSessionCreation);
 		}
-		// Load config: reset period minutes (bad response code) - OPTIONAL
+		//  reset period minutes (bad response code) - OPTIONAL
 		{
-			String value = configManager.getConfigurationValue(PARAM_RESET_PERIOD_BAD_RESPONSE_CODE);
-			if (value == null) value = "2";
-			try {
-				this.resetPeriodMinutesBadResponseCode = Integer.parseInt(value.trim());
-			} catch(NumberFormatException e) {
-				throw new UnavailableException("Unable to number-parse configured 'reset period minutes (bad response code)': "+value);
-			}
-			if (this.debug) logLocal("Reset period minutes (bad response code): "+value);
+			this.resetPeriodMinutesBadResponseCode = (Integer) filterInitHandler.init(PARAM_RESET_PERIOD_BAD_RESPONSE_CODE, this.resetPeriodMinutesBadResponseCode);
 		}
-		// Load config: reset period minutes (redirect threshold) - OPTIONAL
+		//  reset period minutes (redirect threshold) - OPTIONAL
 		{
-			String value = configManager.getConfigurationValue(PARAM_RESET_PERIOD_REDIRECT_THRESHOLD);
-			if (value == null) value = "2"; //
-			try {
-				this.resetPeriodMinutesRedirectThreshold = Integer.parseInt(value.trim());
-			} catch(NumberFormatException e) {
-				throw new UnavailableException("Unable to number-parse configured 'reset period minutes (redirect threshold)': "+value);
-			}
-			if (this.debug) logLocal("Reset period minutes (redirect threshold): "+value);
+			this.resetPeriodMinutesRedirectThreshold = (Integer) filterInitHandler.init(PARAM_RESET_PERIOD_REDIRECT_THRESHOLD, this.resetPeriodMinutesRedirectThreshold);
 		}
 
-		// Load config: flush response - OPTIONAL
+		//  flush response - OPTIONAL
 		{
-			String value = configManager.getConfigurationValue(PARAM_FLUSH_RESPONSE);
-			if (value == null) value = "true";
-			this.flushResponse = (""+true).equals( value.trim().toLowerCase() );
-			if (this.debug) logLocal("Flush response: "+this.flushResponse);
+			this.flushResponse = (Boolean) filterInitHandler.init(PARAM_FLUSH_RESPONSE, Boolean.TRUE);
 		}
 
-		// Load config: invalidate session on attack - OPTIONAL
+		//  invalidate session on attack - OPTIONAL
 		{
-			String value = configManager.getConfigurationValue(PARAM_INVALIDATE_SESSION_ON_ATTACK);
-			if (value == null) value = "false";
-			this.invalidateSessionOnAttack = (""+true).equals( value.trim().toLowerCase() );
-			if (this.debug) logLocal("Invalidate session on attack: "+this.invalidateSessionOnAttack);
+			this.invalidateSessionOnAttack = (Boolean) filterInitHandler.init(PARAM_INVALIDATE_SESSION_ON_ATTACK, Boolean.FALSE);
 		}
 
-		// Load config: log verbose for development mode - OPTIONAL
+		//  log verbose for development mode - OPTIONAL
 		{
-			String value = configManager.getConfigurationValue(PARAM_LOG_VERBOSE_FOR_DEVELOPMENT_MODE);
-			if (value == null) value = "false";
-			this.logVerboseForDevelopmentMode = (""+true).equals( value.trim().toLowerCase() );
-			if (this.debug) logLocal("Log verbose for development mode: "+this.logVerboseForDevelopmentMode);
+			this.logVerboseForDevelopmentMode =  (Boolean) filterInitHandler.init(PARAM_LOG_VERBOSE_FOR_DEVELOPMENT_MODE, Boolean.FALSE);
 		}
 
-		// Load config: block repeated redirects threshold - OPTIONAL
+		//  block repeated redirects threshold - OPTIONAL
 		{
-			String value = configManager.getConfigurationValue(PARAM_BLOCK_REPEATED_REDIRECTS_THRESHOLD);
-			if (value == null) value = "150";
-			try {
-				this.blockRepeatedRedirectsThreshold = Integer.parseInt(value.trim());
-				if (this.blockRepeatedRedirectsThreshold < 0) throw new UnavailableException("Configured 'block repeated redirects threshold' must not be negative: "+value);
-			} catch(NumberFormatException e) {
-				throw new UnavailableException("Unable to number-parse configured 'block repeated redirects threshold': "+value);
-			}
-			if (this.debug) logLocal("Block repeated redirects threshold: "+this.blockRepeatedRedirectsThreshold);
+			this.blockRepeatedRedirectsThreshold = (Integer) filterInitHandler.init(PARAM_BLOCK_REPEATED_REDIRECTS_THRESHOLD, this.blockRepeatedRedirectsThreshold);
 		}
 
-		// Load config: remove sensitive data request param name pattern - OPTIONAL
+		//  remove sensitive data request param name pattern - OPTIONAL
 		{
 			String value = configManager.getConfigurationValue(PARAM_REMOVE_SENSITIVE_DATA_REQUEST_PARAM_NAME_PATTERN);
 			if (value == null) value = "(?i)p(?:ass)?(?:wor[dt]|phrase|wd)|kennwort";
@@ -3093,7 +2635,7 @@ public final class KsWafFilter implements javax.servlet.Filter {
 			}
 		}
 
-		// Load config: remove sensitive data value pattern - OPTIONAL
+		//  remove sensitive data value pattern - OPTIONAL
 		{
 			String value = configManager.getConfigurationValue(PARAM_REMOVE_SENSITIVE_DATA_VALUE_PATTERN);
 			if (value == null) value = "(?:\\d{4}[- \\+]){3}\\d{4}|(?:(?!000)([0-6]\\d{2}|7([0-6]\\d|7[012]))([ -]?)(?!00)\\d\\d\\3(?!0000)\\d{4})"; // = Creditcard number as well as SSN number value
@@ -3106,36 +2648,28 @@ public final class KsWafFilter implements javax.servlet.Filter {
 		}
 
 
-		// Load config: log client user data - OPTIONAL
-		boolean logClientUserData; // used in the next config item only (see below)
+		//  log client user data - OPTIONAL
+		boolean logClientUserData = true; // used in the next config item only (see below)
 		{
-			String value = configManager.getConfigurationValue(PARAM_LOG_CLIENT_USER_DATA);
-			if (value == null) value = ""+true;
-			final boolean flag = (""+true).equals( value.trim().toLowerCase() );
-			logClientUserData = flag;
-			if (this.debug) logLocal("Log client user data: "+flag);
+			logClientUserData = (Boolean) filterInitHandler.init(PARAM_LOG_CLIENT_USER_DATA, logClientUserData);
 		}
 
-		// Load config: block attacking clients threshold - OPTIONAL
+		//  block attacking clients threshold - OPTIONAL
 		{
 			final AttackLogger attackLogger; // only used below inside the AttackHandler
-			String value = configManager.getConfigurationValue(PARAM_ATTACK_LOGGER);
-			if (value == null) value = "com.ks.DefaultAttackLogger"; // = this implementation has defaults too so that it does not require any further mandatory init-params
-			value = value.trim();
-			if (value.length() == 0) throw new UnavailableException("Filter init-param is empty: "+PARAM_ATTACK_LOGGER);
 			try {
-				attackLogger = (AttackLogger) Class.forName(value).newInstance();
+				attackLogger = (AttackLogger) Class.forName("com.ks.DefaultAttackLogger").newInstance();
 				attackLogger.setFilterConfig(filterConfig);
 			} catch (ClassNotFoundException e) {
-				throw new UnavailableException("Unable to find geo-locator class ("+value+"): "+e.getMessage());
+				throw new UnavailableException("Unable to find geo-locator class : "+e.getMessage());
 			} catch (InstantiationException e) {
-				throw new UnavailableException("Unable to instantiate geo-locator ("+value+"): "+e.getMessage());
+				throw new UnavailableException("Unable to instantiate geo-locator : "+e.getMessage());
 			} catch (IllegalAccessException e) {
-				throw new UnavailableException("Unable to access geo-locator ("+value+"): "+e.getMessage());
+				throw new UnavailableException("Unable to access geo-locator : "+e.getMessage());
 			} catch (FilterConfigurationException e) {
-				throw new UnavailableException("Unable to configure geo-locator ("+value+"): "+e.getMessage());
+				throw new UnavailableException("Unable to configure geo-locator : "+e.getMessage());
 			} catch (RuntimeException e) {
-				throw new UnavailableException("Unable to use geo-locator ("+value+"): "+e.getMessage());
+				throw new UnavailableException("Unable to use geo-locator : "+e.getMessage());
 			}
 			assert attackLogger != null;
 
@@ -3153,7 +2687,7 @@ public final class KsWafFilter implements javax.servlet.Filter {
 		}
 
 
-		// Load config: entry-point file path - OPTIONAL
+		//  entry-point file path - OPTIONAL
 		{
 			String value = configManager.getConfigurationValue(PARAM_PATH_TO_ENTRY_POINT_FILES);
 			if (value == null) value = "entry-points";
@@ -3175,7 +2709,7 @@ public final class KsWafFilter implements javax.servlet.Filter {
 			assert this.entryPointDefinitions != null;
 		}
 
-		// Load config: optimization-hint file path - OPTIONAL
+		//  optimization-hint file path - OPTIONAL
 		{
 			String value = configManager.getConfigurationValue(PARAM_PATH_TO_OPTIMIZATION_HINT_FILES);
 			if (value == null) value = "optimization-hints";
@@ -3197,7 +2731,7 @@ public final class KsWafFilter implements javax.servlet.Filter {
 			assert this.optimizationHintDefinitions != null;
 		}
 
-		// Load config: renewSession-point file path - OPTIONAL
+		//  renewSession-point file path - OPTIONAL
 		{
 			String value = configManager.getConfigurationValue(PARAM_PATH_TO_RENEW_SESSION_AND_TOKEN_POINT_FILES);
 			if (value == null) value = "renew-session-and-token-points";
@@ -3219,7 +2753,7 @@ public final class KsWafFilter implements javax.servlet.Filter {
 			assert this.renewSessionPointDefinitions != null;
 		}
 
-		// Load config: incomingProtectionExclude-point file path - OPTIONAL
+		//  incomingProtectionExclude-point file path - OPTIONAL
 		{
 			String value = configManager.getConfigurationValue(PARAM_PATH_TO_INCOMING_PROTECTION_EXCLUDE_FILES);
 			if (value == null) value = "incoming-protection-excludes";
@@ -3241,7 +2775,7 @@ public final class KsWafFilter implements javax.servlet.Filter {
 			assert this.incomingProtectionExcludeDefinitions != null;
 		}
 
-		// Load config: response-modifications file path - OPTIONAL
+		//  response-modifications file path - OPTIONAL
 		{
 			String value = configManager.getConfigurationValue(PARAM_PATH_TO_RESPONSE_MODIFICATION_FILES);
 			if (value == null) value = RESPONSE_MODIFICATIONS_DEFAULT;
@@ -3263,7 +2797,7 @@ public final class KsWafFilter implements javax.servlet.Filter {
 			assert this.responseModificationDefinitions != null;
 		}
 
-		// Load config: white-list request file path - OPTIONAL
+		//  white-list request file path - OPTIONAL
 		{
 			String value = configManager.getConfigurationValue(PARAM_PATH_TO_WHITELIST_REQUESTS_FILES);
 			if (value == null) value = "whitelist-requests";
@@ -3285,7 +2819,7 @@ public final class KsWafFilter implements javax.servlet.Filter {
 			assert this.whiteListDefinitions != null;
 		}
 
-		// Load config: bad-request file path - OPTIONAL
+		//  bad-request file path - OPTIONAL
 		{
 			String value = configManager.getConfigurationValue(PARAM_PATH_TO_BAD_REQUEST_FILES);
 			if (value == null) value = "bad-requests";
@@ -3307,7 +2841,7 @@ public final class KsWafFilter implements javax.servlet.Filter {
 			assert this.badRequestDefinitions != null;
 		}
 
-		// Load config: DoS-Limit file path - OPTIONAL
+		//  DoS-Limit file path - OPTIONAL
 		{
 			assert this.attackHandler != null;
 			String value = configManager.getConfigurationValue(PARAM_PATH_TO_DOS_LIMIT_FILES);
@@ -3332,7 +2866,7 @@ public final class KsWafFilter implements javax.servlet.Filter {
 			assert this.denialOfServiceLimitCounter != null;
 		}
 
-		// Load config: total exclude request file path - OPTIONAL
+		//  total exclude request file path - OPTIONAL
 		{
 			String value = configManager.getConfigurationValue(PARAM_PATH_TO_TOTAL_EXCLUDE_FILES);
 			if (value == null) value = "total-excludes";
@@ -3350,7 +2884,7 @@ public final class KsWafFilter implements javax.servlet.Filter {
 			assert this.totalExcludeDefinitions != null;
 		}
 
-		// Load config: content modification exclude request file path - OPTIONAL
+		//  content modification exclude request file path - OPTIONAL
 		{
 			String value = configManager.getConfigurationValue(PARAM_PATH_TO_CONTENT_MODIFICATION_EXCLUDE_FILES);
 			if (value == null) value = MODIFICATION_EXCLUDES_DEFAULT;
@@ -3369,7 +2903,7 @@ public final class KsWafFilter implements javax.servlet.Filter {
 			assert this.contentModificationExcludeDefinitions != null;
 		}
 
-		// Load config: size limit request file path - OPTIONAL
+		//  size limit request file path - OPTIONAL
 		{
 			String value = configManager.getConfigurationValue(PARAM_PATH_TO_SIZE_LIMIT_FILES);
 			if (value == null) value = "size-limits";
@@ -3387,7 +2921,7 @@ public final class KsWafFilter implements javax.servlet.Filter {
 			assert this.sizeLimitDefinitions != null;
 		}
 
-		// Load config: multipart size limit request file path - OPTIONAL
+		//  multipart size limit request file path - OPTIONAL
 		{
 			String value = configManager.getConfigurationValue(PARAM_PATH_TO_MULTIPART_SIZE_LIMIT_FILES);
 			if (value == null) value = "multipart-size-limits";
@@ -3405,7 +2939,7 @@ public final class KsWafFilter implements javax.servlet.Filter {
 			assert this.multipartSizeLimitDefinitions != null;
 		}
 
-		// Load config: decoding permutation file path - OPTIONAL
+		//  decoding permutation file path - OPTIONAL
 		{
 			String value = configManager.getConfigurationValue(PARAM_PATH_TO_DECODING_PERMUTATION_FILES);
 			if (value == null) value = "decoding-permutations";
@@ -3423,7 +2957,7 @@ public final class KsWafFilter implements javax.servlet.Filter {
 			assert this.decodingPermutationDefinitions != null;
 		}
 
-		// Load config: form field masking exclude request file path - OPTIONAL
+		//  form field masking exclude request file path - OPTIONAL
 		{
 			String value = configManager.getConfigurationValue(PARAM_PATH_TO_FORM_FIELD_MASKING_EXCLUDE_FILES);
 			if (value == null) value = "form-field-masking-excludes";
@@ -3444,71 +2978,47 @@ public final class KsWafFilter implements javax.servlet.Filter {
 
 
 
-		// Load config: secret token link injection - OPTIONAL
+		//  secret token link injection - OPTIONAL
 		{
-			String applyProtectiveLinkInjectionValue = configManager.getConfigurationValue(PARAM_SECRET_TOKEN_LINK_INJECTION);
-			if (applyProtectiveLinkInjectionValue == null) applyProtectiveLinkInjectionValue = "false";
-			final boolean flag = (""+true).equals( applyProtectiveLinkInjectionValue.trim().toLowerCase() );
-			this.contentInjectionHelper.setInjectSecretTokenIntoLinks(flag);
-			if (this.debug) logLocal("Apply secret token link injection: "+flag);
+			this.contentInjectionHelper.setInjectSecretTokenIntoLinks((Boolean) filterInitHandler.init(PARAM_SECRET_TOKEN_LINK_INJECTION,Boolean.FALSE));
 		} // ordering is important here, since the features depend on each other
-		// Load config: encrypt query strings - OPTIONAL
+		//  encrypt query strings - OPTIONAL
 		{
-			String value = configManager.getConfigurationValue(PARAM_ENCRYPT_QUERY_STRINGS);
-			if (value == null) value = ""+false;
-			final boolean flag = (""+true).equals( value.trim().toLowerCase() );
-			this.contentInjectionHelper.setEncryptQueryStringInLinks(flag);
-			if (this.debug) logLocal("Encrypt query strings: "+flag);
+			this.contentInjectionHelper.setEncryptQueryStringInLinks((Boolean) filterInitHandler.init(PARAM_ENCRYPT_QUERY_STRINGS,Boolean.FALSE));
 			// this feature depends on another feature:
 			if (this.contentInjectionHelper.isEncryptQueryStringInLinks() && !this.contentInjectionHelper.isInjectSecretTokenIntoLinks()) {
 				throw new UnavailableException("When 'query string encryption' is activated the feature 'secret token link injection' must be activated also");
 			}
 		} // ordering is important here, since the features depend on each other
-		// Load config: extra encrypted value hash protection - OPTIONAL
+		//  extra encrypted value hash protection - OPTIONAL
 		{
-			String value = configManager.getConfigurationValue(PARAM_EXTRA_HASH_PROTECTION);
-			if (value == null) value = ""+false;
-			final boolean flag = (""+true).equals( value.trim().toLowerCase() );
-			this.extraEncryptedValueHashProtection = flag;
-			if (this.debug) logLocal("Apply extra encrypted value hash protection: "+flag);
+			this.extraEncryptedValueHashProtection =(Boolean) filterInitHandler.init(PARAM_EXTRA_HASH_PROTECTION,Boolean.FALSE);
 			// this feature depends on another feature:
 			if (this.extraEncryptedValueHashProtection && !this.contentInjectionHelper.isEncryptQueryStringInLinks()) {
 				throw new UnavailableException("When 'extra encrypted value hash protection' is activated the feature 'query string encryption' must be activated also");
 			}
 		}
-		// Load config: extra encrypted full path resource protection - OPTIONAL
+		//  extra encrypted full path resource protection - OPTIONAL
 		{
-			String value = configManager.getConfigurationValue(PARAM_EXTRA_FULL_PATH_PROTECTION);
-			if (value == null) value = ""+false;
-			final boolean flag = (""+true).equals( value.trim().toLowerCase() );
-			this.useFullPathForResourceToBeAccessedProtection = flag;
-			if (this.debug) logLocal("Apply extra encrypted full path resource protection: "+flag);
+			this.useFullPathForResourceToBeAccessedProtection = (Boolean) filterInitHandler.init(PARAM_EXTRA_FULL_PATH_PROTECTION,Boolean.FALSE);
 			// this feature depends on another feature(s):
 			if (this.useFullPathForResourceToBeAccessedProtection) {
 				if (!this.contentInjectionHelper.isEncryptQueryStringInLinks()) throw new UnavailableException("When 'extra encrypted full path resource protection' is activated the feature 'query string encryption' must be activated also");
 			}
 		} // ordering is important here, since the features depend on each other
-		// Load config: extra encrypted medium path resource removal - OPTIONAL
+		//  extra encrypted medium path resource removal - OPTIONAL
 		{
-			String value = configManager.getConfigurationValue(PARAM_EXTRA_MEDIUM_PATH_REMOVAL);
-			if (value == null) value = ""+false;
-			final boolean flag = (""+true).equals( value.trim().toLowerCase() );
-			this.additionalMediumResourceRemoval = flag;
-			this.contentInjectionHelper.setExtraMediumPathRemoval(flag);
-			if (this.debug) logLocal("Apply extra encrypted medium path resource removal: "+flag);
+			this.additionalMediumResourceRemoval = (Boolean) filterInitHandler.init(PARAM_EXTRA_MEDIUM_PATH_REMOVAL,Boolean.FALSE);
+			this.contentInjectionHelper.setExtraMediumPathRemoval(this.additionalMediumResourceRemoval);
 			// this feature depends on another feature:
 			if (this.additionalMediumResourceRemoval && !this.contentInjectionHelper.isEncryptQueryStringInLinks()) {
 				throw new UnavailableException("When 'extra encrypted medium path resource removal' is activated the feature 'query string encryption' must be activated also");
 			}
 		} // ordering is important here, since the features depend on each other
-		// Load config: extra encrypted full path resource removal - OPTIONAL
+		//  extra encrypted full path resource removal - OPTIONAL
 		{
-			String value = configManager.getConfigurationValue(PARAM_EXTRA_FULL_PATH_REMOVAL);
-			if (value == null) value = ""+false;
-			final boolean flag = (""+true).equals( value.trim().toLowerCase() );
-			this.additionalFullResourceRemoval = flag;
-			this.contentInjectionHelper.setExtraFullPathRemoval(flag);
-			if (this.debug) logLocal("Apply extra encrypted full path resource removal: "+flag);
+			this.additionalFullResourceRemoval = (Boolean) filterInitHandler.init(PARAM_EXTRA_FULL_PATH_REMOVAL,Boolean.FALSE);
+			this.contentInjectionHelper.setExtraFullPathRemoval(this.additionalFullResourceRemoval);
 			// this feature depends on another feature:
 			if (this.additionalFullResourceRemoval) {
 				if (!this.useFullPathForResourceToBeAccessedProtection) throw new UnavailableException("When 'extra encrypted full path resource removal' is activated the feature 'extra encrypted full path resource protection' must be activated also");
@@ -3523,264 +3033,174 @@ public final class KsWafFilter implements javax.servlet.Filter {
 		if (this.additionalMediumResourceRemoval && this.additionalFullResourceRemoval) {
 			throw new UnavailableException("The features 'extra encrypted medium path resource removal' and 'extra encrypted full path resource removal' must not be activated both (does not make sense)");
 		}
-		// Load config: Block multipart requests for non-multipart forms - OPTIONAL
+		//  Block multipart requests for non-multipart forms - OPTIONAL
 		{
-			String value = configManager.getConfigurationValue(PARAM_BLOCK_MULTIPART_REQUESTS_FOR_NON_MULTIPART_FORMS);
-			if (value == null) value = ""+false;
-			final boolean flag = (""+true).equals( value.trim().toLowerCase() );
-			this.blockMultipartRequestsForNonMultipartForms = flag;
-			if (this.debug) logLocal("Block multipart requests for non-multipart forms: "+flag);
+			this.blockMultipartRequestsForNonMultipartForms = (Boolean) filterInitHandler.init(PARAM_BLOCK_MULTIPART_REQUESTS_FOR_NON_MULTIPART_FORMS,Boolean.FALSE);
 			// this feature depends on another feature:
 			if (this.blockMultipartRequestsForNonMultipartForms && !this.contentInjectionHelper.isEncryptQueryStringInLinks()) {
 				throw new UnavailableException("When 'block multipart requests for non-multipart forms' is activated the feature 'query string encryption' must be activated also");
 			}
 		}
-		// Load config: parameter and form protection - OPTIONAL
+		//  parameter and form protection - OPTIONAL
 		{
-			String value = configManager.getConfigurationValue(PARAM_PARAMETER_AND_FORM_PROTECTION);
-			if (value == null) value = "false";
-			final boolean flag = (""+true).equals( value.trim().toLowerCase() );
+			final boolean flag = (Boolean) filterInitHandler.init(PARAM_PARAMETER_AND_FORM_PROTECTION,Boolean.FALSE);
 			this.contentInjectionHelper.setProtectParametersAndForms(flag);
-			if (this.debug) logLocal("Apply parameter and form protection: "+flag);
 			// this feature depends on another feature:
 			if (this.contentInjectionHelper.isProtectParametersAndForms() && !this.contentInjectionHelper.isEncryptQueryStringInLinks()) {
 				throw new UnavailableException("When 'parameter and form protection' is activated the feature 'query string encryption' must be activated also");
 			}
 		} // ordering is important here, since the features depend on each other
-		// Load config: Extra strict parameter checking for encrypted links - OPTIONAL
+		//  Extra strict parameter checking for encrypted links - OPTIONAL
 		{
-			String value = configManager.getConfigurationValue(PARAM_EXTRA_STRICT_PARAMETER_CHECKING_FOR_ENCRYPTED_LINKS);
-			if (value == null) value = ""+false;
-			final boolean flag = (""+true).equals( value.trim().toLowerCase() );
+			final boolean flag = (Boolean) filterInitHandler.init(PARAM_EXTRA_STRICT_PARAMETER_CHECKING_FOR_ENCRYPTED_LINKS,Boolean.FALSE);
 			this.contentInjectionHelper.setExtraStrictParameterCheckingForEncryptedLinks(flag);
-			if (this.debug) logLocal("Extra strict parameter checking for encrypted links: "+flag);
 			// this feature depends on another feature:
 			if (this.contentInjectionHelper.isExtraStrictParameterCheckingForEncryptedLinks() && !this.contentInjectionHelper.isProtectParametersAndForms()) {
 				throw new UnavailableException("When 'extra strict parameter checking for encrypted links' is activated the feature 'parameter and form protection' must be activated also");
 			}
 		}
-		// Load config: extra disabled form field protection - OPTIONAL
+		//  extra disabled form field protection - OPTIONAL
 		{
-			String value = configManager.getConfigurationValue(PARAM_EXTRA_DISABLED_FORM_FIELD_PROTECTION);
-			if (value == null) value = "false";
-			final boolean flag = (""+true).equals( value.trim().toLowerCase() );
+			final boolean flag = (Boolean) filterInitHandler.init(PARAM_EXTRA_DISABLED_FORM_FIELD_PROTECTION,Boolean.FALSE);
 			this.contentInjectionHelper.setExtraProtectDisabledFormFields(flag);
-			if (this.debug) logLocal("Apply extra disabled form field protection: "+flag);
 			// this feature depends on another feature:
 			if (this.contentInjectionHelper.isExtraProtectDisabledFormFields() && !this.contentInjectionHelper.isProtectParametersAndForms()) {
 				throw new UnavailableException("When 'extra disabled form field protection' is activated the feature 'parameter and form protection' must be activated also");
 			}
 		} // ordering is important here, since the features depend on each other
-		// Load config: extra readonly form field protection - OPTIONAL
+		//  extra readonly form field protection - OPTIONAL
 		{
-			String value = configManager.getConfigurationValue(PARAM_EXTRA_READONLY_FORM_FIELD_PROTECTION);
-			if (value == null) value = "false";
-			final boolean flag = (""+true).equals( value.trim().toLowerCase() );
+			final boolean flag =(Boolean) filterInitHandler.init(PARAM_EXTRA_READONLY_FORM_FIELD_PROTECTION,Boolean.FALSE);
 			this.contentInjectionHelper.setExtraProtectReadonlyFormFields(flag);
-			if (this.debug) logLocal("Apply extra readonly form field protection: "+flag);
 			// this feature depends on another feature:
 			if (this.contentInjectionHelper.isExtraProtectReadonlyFormFields() && !this.contentInjectionHelper.isProtectParametersAndForms()) {
 				throw new UnavailableException("When 'extra readonly form field protection' is activated the feature 'parameter and form protection' must be activated also");
 			}
 		}
-		// Load config: extra request-param value count protection - OPTIONAL
+		//  extra request-param value count protection - OPTIONAL
 		{
-			String value = configManager.getConfigurationValue(PARAM_EXTRA_REQUEST_PARAM_VALUE_COUNT_PROTECTION);
-			if (value == null) value = "false";
-			final boolean flag = (""+true).equals( value.trim().toLowerCase() );
+			final boolean flag = (Boolean) filterInitHandler.init(PARAM_EXTRA_REQUEST_PARAM_VALUE_COUNT_PROTECTION,Boolean.FALSE);
 			this.contentInjectionHelper.setExtraProtectRequestParamValueCount(flag);
-			if (this.debug) logLocal("Apply extra request-param value count protection: "+flag);
 			// this feature depends on another feature:
 			if (this.contentInjectionHelper.isExtraProtectRequestParamValueCount() && !this.contentInjectionHelper.isProtectParametersAndForms()) {
 				throw new UnavailableException("When 'extra request-param value count protection' is activated the feature 'parameter and form protection' must be activated also");
 			}
 		}
-		// Load config: extra hidden form field protection - OPTIONAL
+		//  extra hidden form field protection - OPTIONAL
 		{
-			String value = configManager.getConfigurationValue(PARAM_EXTRA_HIDDEN_FORM_FIELD_PROTECTION);
-			if (value == null) value = "false";
-			final boolean flag = (""+true).equals( value.trim().toLowerCase() );
+			final boolean flag = (Boolean) filterInitHandler.init(PARAM_EXTRA_HIDDEN_FORM_FIELD_PROTECTION,Boolean.FALSE);
 			this.hiddenFormFieldProtection = flag;
-			if (this.debug) logLocal("Apply extra hidden form field protection: "+flag);
 			// this feature depends on another feature:
 			if (flag && !this.contentInjectionHelper.isProtectParametersAndForms()) {
 				throw new UnavailableException("When 'extra hidden form field protection' is activated the feature 'parameter and form protection' must be activated also");
 			}
 		}
-		// Load config: extra selectbox protection - OPTIONAL
+		//  extra selectbox protection - OPTIONAL
 		{
-			String value = configManager.getConfigurationValue(PARAM_EXTRA_SELECTBOX_PROTECTION);
-			if (value == null) value = "false";
-			final boolean flag = (""+true).equals( value.trim().toLowerCase() );
+			final boolean flag = (Boolean) filterInitHandler.init(PARAM_EXTRA_SELECTBOX_PROTECTION,Boolean.FALSE);
 			this.selectboxProtection = flag;
-			if (this.debug) logLocal("Apply extra selectbox protection: "+flag);
 			// this feature depends on another feature:
 			if (flag && !this.contentInjectionHelper.isProtectParametersAndForms()) {
 				throw new UnavailableException("When 'extra selectbox protection' is activated the feature 'parameter and form protection' must be activated also");
 			}
 		}
-		// Load config: extra checkbox protection - OPTIONAL
+		//  extra checkbox protection - OPTIONAL
 		{
-			String value = configManager.getConfigurationValue(PARAM_EXTRA_CHECKBOX_PROTECTION);
-			if (value == null) value = "false";
-			final boolean flag = (""+true).equals( value.trim().toLowerCase() );
-			this.checkboxProtection = flag;
-			if (this.debug) logLocal("Apply extra checkbox protection: "+flag);
+			this.checkboxProtection = (Boolean) filterInitHandler.init(PARAM_EXTRA_CHECKBOX_PROTECTION,Boolean.FALSE);
 			// this feature depends on another feature:
-			if (flag && !this.contentInjectionHelper.isProtectParametersAndForms()) {
+			if (this.checkboxProtection && !this.contentInjectionHelper.isProtectParametersAndForms()) {
 				throw new UnavailableException("When 'extra checkbox protection' is activated the feature 'parameter and form protection' must be activated also");
 			}
 		}
-		// Load config: extra radiobutton protection - OPTIONAL
+		//  extra radiobutton protection - OPTIONAL
 		{
-			String value = configManager.getConfigurationValue(PARAM_EXTRA_RADIOBUTTON_PROTECTION);
-			if (value == null) value = "false";
-			final boolean flag = (""+true).equals( value.trim().toLowerCase() );
-			this.radiobuttonProtection = flag;
-			if (this.debug) logLocal("Apply extra radiobutton protection: "+flag);
+			this.radiobuttonProtection = (Boolean) filterInitHandler.init(PARAM_EXTRA_RADIOBUTTON_PROTECTION,Boolean.FALSE);
 			// this feature depends on another feature:
-			if (flag && !this.contentInjectionHelper.isProtectParametersAndForms()) {
+			if (this.radiobuttonProtection && !this.contentInjectionHelper.isProtectParametersAndForms()) {
 				throw new UnavailableException("When 'extra radiobutton protection' is activated the feature 'parameter and form protection' must be activated also");
 			}
 		}
-		// Load config: extra image map parameter exclude - OPTIONAL
+		//  extra image map parameter exclude - OPTIONAL
 		{
-			String value = configManager.getConfigurationValue(PARAM_EXTRA_IMAGE_MAP_PARAMETER_EXCLUDE);
-			if (value == null) value = "false";
-			final boolean flag = (""+true).equals( value.trim().toLowerCase() );
-			this.imageMapParameterExclude = flag;
-			if (this.debug) logLocal("Apply extra image map parameter exclude: "+flag);
+			this.imageMapParameterExclude = (Boolean) filterInitHandler.init(PARAM_EXTRA_IMAGE_MAP_PARAMETER_EXCLUDE,Boolean.FALSE);
 			// this feature depends on another feature(s):
-			if (flag) {
+			if (this.imageMapParameterExclude) {
 				if (!this.contentInjectionHelper.isProtectParametersAndForms()) throw new UnavailableException("When 'extra image map parameter exclude' is activated the feature 'parameter and form protection' must be activated also");
 			}
 		}
-		// Load config: extra Session Timeout Handling - OPTIONAL
+		//  extra Session Timeout Handling - OPTIONAL
 		{
-			String value = configManager.getConfigurationValue(PARAM_EXTRA_SESSION_TIMEOUT_HANDLING);
-			if (value == null) value = "false";
-			final boolean flag = (""+true).equals( value.trim().toLowerCase() );
-			this.extraSessionTimeoutHandling = flag;
-			if (this.debug) logLocal("Apply extra session timeout handling: "+flag);
+			this.extraSessionTimeoutHandling =  (Boolean) filterInitHandler.init(PARAM_EXTRA_SESSION_TIMEOUT_HANDLING,Boolean.FALSE);
 		}
-		// Load config: extra selectbox value masking - OPTIONAL
+		//  extra selectbox value masking - OPTIONAL
 		{
-			String value = configManager.getConfigurationValue(PARAM_EXTRA_SELECTBOX_VALUE_MASKING);
-			if (value == null) value = "false";
-			final boolean flag = (""+true).equals( value.trim().toLowerCase() );
-			this.selectboxValueMasking = flag;
-			if (this.debug) logLocal("Apply extra selectbox value masking: "+flag);
+			this.selectboxValueMasking = (Boolean) filterInitHandler.init(PARAM_EXTRA_SELECTBOX_VALUE_MASKING,Boolean.FALSE);
 			// this feature depends on another feature(s):
-			if (flag) {
+			if (this.selectboxValueMasking) {
 				if (!this.contentInjectionHelper.isProtectParametersAndForms()) throw new UnavailableException("When 'extra selectbox value masking' is activated the feature 'parameter and form protection' must be activated also");
 				if (!this.selectboxProtection) throw new UnavailableException("When 'extra selectbox value masking' is activated the feature 'extra selectbox protection' must be activated also");
 			}
 		}
-		// Load config: extra checkbox value masking - OPTIONAL
+		//  extra checkbox value masking - OPTIONAL
 		{
-			String value = configManager.getConfigurationValue(PARAM_EXTRA_CHECKBOX_VALUE_MASKING);
-			if (value == null) value = "false";
-			final boolean flag = (""+true).equals( value.trim().toLowerCase() );
-			this.checkboxValueMasking = flag;
-			if (this.debug) logLocal("Apply extra checkbox value masking: "+flag);
+			this.checkboxValueMasking =(Boolean) filterInitHandler.init(PARAM_EXTRA_CHECKBOX_VALUE_MASKING,Boolean.FALSE);
 			// this feature depends on another feature(s):
-			if (flag) {
+			if (this.checkboxValueMasking) {
 				if (!this.contentInjectionHelper.isProtectParametersAndForms()) throw new UnavailableException("When 'extra checkbox value masking' is activated the feature 'parameter and form protection' must be activated also");
 				if (!this.checkboxProtection) throw new UnavailableException("When 'extra checkbox value masking' is activated the feature 'extra checkbox protection' must be activated also");
 			}
 		}
-		// Load config: extra radiobutton value masking - OPTIONAL
+		//  extra radiobutton value masking - OPTIONAL
 		{
-			String value = configManager.getConfigurationValue(PARAM_EXTRA_RADIOBUTTON_VALUE_MASKING);
-			if (value == null) value = "false";
-			final boolean flag = (""+true).equals( value.trim().toLowerCase() );
-			this.radiobuttonValueMasking = flag;
-			if (this.debug) logLocal("Apply extra radiobutton value masking: "+flag);
+			this.radiobuttonValueMasking = (Boolean) filterInitHandler.init(PARAM_EXTRA_RADIOBUTTON_VALUE_MASKING,Boolean.FALSE);
 			// this feature depends on another feature(s):
-			if (flag) {
+			if (this.radiobuttonValueMasking) {
 				if (!this.contentInjectionHelper.isProtectParametersAndForms()) throw new UnavailableException("When 'extra radiobutton value masking' is activated the feature 'parameter and form protection' must be activated also");
 				if (!this.radiobuttonProtection) throw new UnavailableException("When 'extra radiobutton value masking' is activated the feature 'extra radiobutton protection' must be activated also");
 			}
 		}
 
 
-		// Load config: treat non-matchig of servletPath as a match for whitelist rules - OPTIONAL
+		//  treat non-matchig of servletPath as a match for whitelist rules - OPTIONAL
 		{
-			String value = configManager.getConfigurationValue(PARAM_TREAT_NON_MATCHING_SERVLET_PATH_AS_MATCH_FOR_WHITELIST_RULES);
-			if (value == null) value = "false";
-			final boolean flag = (""+true).equals( value.trim().toLowerCase() );
-			this.treatNonMatchingServletPathAsMatchForWhitelistRules = flag;
-			if (this.debug) logLocal("Treat non-matchig of servletPath as a match for whitelist rules: "+flag);
+			this.treatNonMatchingServletPathAsMatchForWhitelistRules = (Boolean) filterInitHandler.init(PARAM_TREAT_NON_MATCHING_SERVLET_PATH_AS_MATCH_FOR_WHITELIST_RULES,Boolean.FALSE);
 		}
 
 
-		// Load config: remember last captcha for multi submits - OPTIONAL
-		{
-			String value = configManager.getConfigurationValue(PARAM_REMEMBER_LAST_CAPTCHA_FOR_MULTI_SUBMITS);
-			if (value == null) value = "true";
-			final boolean flag = (""+true).equals( value.trim().toLowerCase() );
-			this.rememberLastCaptchaForMultiSubmits = flag;
-			if (this.debug) logLocal("Remember last captcha for multi submits: "+flag);
-		}
-
-		// Load config: append question mark or ampersand to links - OPTIONAL
+		//  append question mark or ampersand to links - OPTIONAL
 		{
 			// used to support JavaScript addition of further parameters by the application when the application has a hard-coded "?" as parameter query-string opener since it does not expect KsWaf to introduce its own params and therefore uses a "?" instead of the correct "&"... using this trick (to append a trailing "&" by KsWaf) all JavaScripts that append "?" or "&" work... that's the case since KsWaf removed leading "?" in request-param-names when this flag is activated... therefore it should be set to true when the application uses JavaScript to dynamically append params in URLs. Note: using true might cause some ignorable tomcat warnings that the URL looks strange (contains && or trailing &), but that is cused deliberately when setting this flag to true
-			String value = configManager.getConfigurationValue(PARAM_APPEND_QUESTIONMARK_OR_AMPERSAND_TO_LINKS);
-			if (value == null) value = ""+false;
-			final boolean flag = (""+true).equals( value.trim().toLowerCase() );
-			this.appendQuestionmarkOrAmpersandToLinks = flag;
-			if (this.debug) logLocal("Append questionmark or ampersand to lnks: "+flag);
+			this.appendQuestionmarkOrAmpersandToLinks = (Boolean) filterInitHandler.init(PARAM_APPEND_QUESTIONMARK_OR_AMPERSAND_TO_LINKS,Boolean.FALSE);
 		}
 
-		// Load config: append session-id to links - OPTIONAL
+		//  append session-id to links - OPTIONAL
 		{
-			String value = configManager.getConfigurationValue(PARAM_APPEND_SESSIONID_TO_LINKS);
-			if (value == null) value = ""+false;
-			final boolean flag = (""+true).equals( value.trim().toLowerCase() );
-			this.appendSessionIdToLinks = flag;
-			if (this.debug) logLocal("Append session-id to lnks: "+flag);
+			this.appendSessionIdToLinks = (Boolean) filterInitHandler.init(PARAM_APPEND_SESSIONID_TO_LINKS,Boolean.FALSE);
 		}
 
 
-		// Load config: use tuned block parser - OPTIONAL
+		//  use tuned block parser - OPTIONAL
 		{
-			String value = configManager.getConfigurationValue(PARAM_USE_TUNED_BLOCK_PARSER);
-			if (value == null) value = ""+true;
-			final boolean flag = (""+true).equals( value.trim().toLowerCase() );
-			this.contentInjectionHelper.setUseTunedBlockParser(flag);
-			if (this.debug) logLocal("Use tuned block parser: "+flag);
+			this.contentInjectionHelper.setUseTunedBlockParser((Boolean) filterInitHandler.init(PARAM_USE_TUNED_BLOCK_PARSER,Boolean.TRUE));
 		}
 
-		// Load config: use response buffering - OPTIONAL
+		//  use response buffering - OPTIONAL
 		{
-			String value = configManager.getConfigurationValue(PARAM_USE_RESPONSE_BUFFERING);
-			if (value == null) value = ""+false;
-			final boolean flag = (""+true).equals( value.trim().toLowerCase() );
-			this.contentInjectionHelper.setUseResponseBuffering(flag);
-			if (this.debug) logLocal("Use response buffering: "+flag);
+			this.contentInjectionHelper.setUseResponseBuffering((Boolean) filterInitHandler.init(PARAM_USE_RESPONSE_BUFFERING,Boolean.FALSE));
 		}
 
 
-		// Load config: strip html comments - OPTIONAL
+		//  strip html comments - OPTIONAL
 		{
-			String value = configManager.getConfigurationValue(PARAM_STRIP_HTML_COMMENTS);
-			if (value == null) value = ""+false;
-			final boolean flag = (""+true).equals( value.trim().toLowerCase() );
-			this.contentInjectionHelper.setStripHtmlComments(flag);
-			if (this.debug) logLocal("Strip HTML comments: "+flag);
+			this.contentInjectionHelper.setStripHtmlComments((Boolean) filterInitHandler.init(PARAM_STRIP_HTML_COMMENTS,Boolean.FALSE));
 		}
 
-		// Load config: block invalid encoded query string - OPTIONAL
+		//  block invalid encoded query string - OPTIONAL
 		{
-			String value = configManager.getConfigurationValue(PARAM_BLOCK_INVALID_ENCODED_QUERY_STRING);
-			if (value == null) value = ""+false;
-			final boolean flag = (""+true).equals( value.trim().toLowerCase() );
-			this.blockInvalidEncodedQueryString = flag;
-			if (this.debug) logLocal("Block invalid encoded query string: "+flag);
+			this.blockInvalidEncodedQueryString = (Boolean) filterInitHandler.init(PARAM_BLOCK_INVALID_ENCODED_QUERY_STRING,Boolean.FALSE);
 		}
 
-		// Load config: Attack reply HTTP status code or message resource [PROD] - OPTIONAL
+		//  Attack reply HTTP status code or message resource [PROD] - OPTIONAL
 		{
 			String productionAttackReplyConfigValue = configManager.getConfigurationValue(PARAM_PROD_ATTACK_REPLY_STATUS_CODE_OR_MESSAGE_RESOURCE);
 			if (productionAttackReplyConfigValue == null) productionAttackReplyConfigValue = "200"; // we're using HTTP Status-Code 200 (OK) instead of a message file like "com.ks/attack.html" to be even safer and fool attackers
@@ -3808,7 +3228,7 @@ public final class KsWafFilter implements javax.servlet.Filter {
 			}
 		}
 
-		// Load config: Catch-All reply HTTP status code or message resource [PROD] - OPTIONAL
+		//  Catch-All reply HTTP status code or message resource [PROD] - OPTIONAL
 		{
 			String productionExceptionReplyConfigValue = configManager.getConfigurationValue(PARAM_PROD_EXCEPTION_REPLY_STATUS_CODE_OR_MESSAGE_RESOURCE);
 			if (productionExceptionReplyConfigValue == null) productionExceptionReplyConfigValue = "503";
@@ -3836,7 +3256,7 @@ public final class KsWafFilter implements javax.servlet.Filter {
 			}
 		}
 
-		// Load config: Attack reply HTTP status code or message resource [DEV] - OPTIONAL
+		//  Attack reply HTTP status code or message resource [DEV] - OPTIONAL
 		{
 			String developmentAttackReplyConfigValue = configManager.getConfigurationValue(PARAM_DEV_ATTACK_REPLY_STATUS_CODE_OR_MESSAGE_RESOURCE);
 			if (developmentAttackReplyConfigValue == null) developmentAttackReplyConfigValue = "com/ks/attack.html";
@@ -3864,7 +3284,7 @@ public final class KsWafFilter implements javax.servlet.Filter {
 			}
 		}
 
-		// Load config: Catch-All reply HTTP status code or message resource [DEV] - OPTIONAL
+		//  Catch-All reply HTTP status code or message resource [DEV] - OPTIONAL
 		{
 			String developmentExceptionReplyConfigValue = configManager.getConfigurationValue(PARAM_DEV_EXCEPTION_REPLY_STATUS_CODE_OR_MESSAGE_RESOURCE);
 			if (developmentExceptionReplyConfigValue == null) developmentExceptionReplyConfigValue = "com/ks/exception.html";
@@ -3892,42 +3312,26 @@ public final class KsWafFilter implements javax.servlet.Filter {
 			}
 		}
 
-		// Load config: handle uncaught exceptions - OPTIONAL
+		//  handle uncaught exceptions - OPTIONAL
 		{
-			String value = configManager.getConfigurationValue(PARAM_HANDLE_UNCAUGHT_EXCEPTIONS);
-			if (value == null) value = ""+true;
-			final boolean flag = (""+true).equals( value.trim().toLowerCase() );
-			this.catchAll = flag;
-			if (this.debug) logLocal("Handle uncaught exceptions: "+this.catchAll);
+			this.catchAll = (Boolean) filterInitHandler.init(PARAM_HANDLE_UNCAUGHT_EXCEPTIONS,Boolean.TRUE);
 		}
 
-		// Load config: reuse session content - OPTIONAL
+		//  reuse session content - OPTIONAL
 		{
-			String value = configManager.getConfigurationValue(PARAM_REUSE_SESSION_CONTENT);
-			if (value == null) value = ""+true;
-			final boolean flag = (""+true).equals( value.trim().toLowerCase() );
-			this.reuseSessionContent = flag;
-			if (this.debug) logLocal("Reuse session content: "+flag);
+			this.reuseSessionContent = (Boolean) filterInitHandler.init(PARAM_REUSE_SESSION_CONTENT,Boolean.TRUE);
 		}
 
-		// Load config: reuse session content - OPTIONAL
+		//  reuse session content - OPTIONAL
 		{
-			String value = configManager.getConfigurationValue(PARAM_HIDE_INTERNAL_SESSION_ATTRIBUTES);
-			if (value == null) value = ""+false; // should be left "false" since otherwise (when hidden) session serialization (which is done when the session is stored in the DB or on the Disk) won't work... since the container can't see the attributes when they're hidden
-			final boolean flag = (""+true).equals( value.trim().toLowerCase() );
-			this.hideInternalSessionAttributes = flag;
-			if (this.debug) logLocal("Hide internal session attributes: "+flag);
+			this.hideInternalSessionAttributes = (Boolean) filterInitHandler.init(PARAM_HIDE_INTERNAL_SESSION_ATTRIBUTES,Boolean.FALSE);
 		}
 
-		// Load config: parse multipart forms - OPTIONAL
+		//  parse multipart forms - OPTIONAL
 		{
-			String value = configManager.getConfigurationValue(PARAM_PARSE_MULTI_PART_FORMS);
-			if (value == null) value = ""+true; // yes, true as default makes much sense here !!!! to avoid being circumvented when the application parses multipart forms and the filter does not
-			final boolean flag = (""+true).equals( value.trim().toLowerCase() );
-			this.parseMultipartForms = flag;
-			if (this.debug) logLocal("Parse multipart forms: "+flag);
+			this.parseMultipartForms = (Boolean) filterInitHandler.init(PARAM_PARSE_MULTI_PART_FORMS,Boolean.TRUE);
 		}
-		// Load config: Allowed request mime types - OPTIONAL
+		//  Allowed request mime types - OPTIONAL
 		{
 			String value = configManager.getConfigurationValue(PARAM_ALLOWED_REQUEST_MIME_TYPES);
 			if (value == null) value = "application/x-www-form-urlencoded,multipart/form-data,text/plain,text/xml,application/xml";
@@ -3939,82 +3343,47 @@ public final class KsWafFilter implements javax.servlet.Filter {
 			if (this.debug) logLocal("Allowed request mime types: "+this.allowedRequestMimeTypesLowerCased);
 		}
 
-		// Load config: present multipart form params - OPTIONAL
+		//  present multipart form params - OPTIONAL
 		{
-			String value = configManager.getConfigurationValue(PARAM_PRESENT_MULTIPART_FORM_PARAMS_AS_REGULAR_PARAMS_TO_APPLICATION);
-			if (value == null) value = ""+false;
-			final boolean flag = (""+true).equals( value.trim().toLowerCase() );
-			this.presentMultipartFormParametersAsRegularParametersToApplication = flag;
-			if (this.debug) logLocal("Present multipart form params: "+flag);
+			this.presentMultipartFormParametersAsRegularParametersToApplication = (Boolean) filterInitHandler.init(PARAM_PRESENT_MULTIPART_FORM_PARAMS_AS_REGULAR_PARAMS_TO_APPLICATION,Boolean.FALSE);
 		}
 
-		// Load config: PDF XSS protection - OPTIONAL
+		//  PDF XSS protection - OPTIONAL
 		{
-			String value = configManager.getConfigurationValue(PARAM_PDF_XSS_PROTECTION);
-			if (value == null) value = ""+false;
-			final boolean flag = (""+true).equals( value.trim().toLowerCase() );
-			this.pdfXssProtection = flag;
-			if (this.debug) logLocal("PDF XSS protection: "+flag);
+			this.pdfXssProtection =(Boolean) filterInitHandler.init(PARAM_PDF_XSS_PROTECTION,Boolean.FALSE);
 		}
 
-		// Load config: honeylink max per page - OPTIONAL
+		//  honeylink max per page - OPTIONAL
 		{
-			String value = configManager.getConfigurationValue(PARAM_HONEYLINK_MAX_PER_RESPONSE);
-			if (value == null) value = "0";
-			try {
-				this.honeylinkMaxPerPage = Short.parseShort(value.trim());
-				if (this.honeylinkMaxPerPage < 0) throw new UnavailableException("Configured 'honeylink max per response' must not be negative: "+value);
-			} catch(NumberFormatException e) {
-				throw new UnavailableException("Unable to number-parse (short) configured 'honeylink max per response': "+value);
-			}
+			this.honeylinkMaxPerPage = (Short) filterInitHandler.init(PARAM_HONEYLINK_MAX_PER_RESPONSE,this.honeylinkMaxPerPage);
 		}
 
-		// Load config: honeylink prefix - OPTIONAL
+		//  honeylink prefix - OPTIONAL
 		{
-			String value = configManager.getConfigurationValue(PARAM_HONEYLINK_PREFIX);
-			if (value == null) value = "";
-			this.honeylinkPrefix = value.trim();
-			if (this.debug) logLocal("Honeylink prefix: "+value);
+			this.honeylinkPrefix = (String) filterInitHandler.init(PARAM_HONEYLINK_PREFIX, this.honeylinkPrefix);
 		}
 
-		// Load config: honeylink suffix - OPTIONAL
+		//  honeylink suffix - OPTIONAL
 		{
-			String value = configManager.getConfigurationValue(PARAM_HONEYLINK_SUFFIX);
-			if (value == null) value = "";
-			this.honeylinkSuffix = value.trim();
-			if (this.debug) logLocal("Honeylink suffix: "+value);
+			this.honeylinkSuffix = (String) filterInitHandler.init(PARAM_HONEYLINK_SUFFIX, this.honeylinkSuffix);
 		}
 
-		// Load config: randomize honeylinks on every response - OPTIONAL
+		//  randomize honeylinks on every response - OPTIONAL
 		{
-			String value = configManager.getConfigurationValue(PARAM_RANDOMIZE_HONEYLINKS_ON_EVERY_RESPONSE);
-			if (value == null) value = ""+false;
-			final boolean flag = (""+true).equals( value.trim().toLowerCase() );
-			this.randomizeHoneylinksOnEveryRequest = flag;
-			if (this.debug) logLocal("Randomize honeylinks on every response: "+flag);
+			this.randomizeHoneylinksOnEveryRequest = (Boolean) filterInitHandler.init(PARAM_RANDOMIZE_HONEYLINKS_ON_EVERY_RESPONSE,Boolean.FALSE);
 		}
 
-		// Load config: forced session invalidation period - OPTIONAL
+		//  forced session invalidation period - OPTIONAL
 		{
-			String value = configManager.getConfigurationValue(PARAM_FORCED_SESSION_INVALIDATION_PERIOD_MINUTES);
-			if (value == null) value = "900";
-			try {
-				this.forcedSessionInvalidationPeriodMinutes = Integer.parseInt(value.trim());
-				if (this.forcedSessionInvalidationPeriodMinutes < 0) throw new UnavailableException("Configured HTTP status code to send as reply to attacks must not be negative: "+value);
-			} catch(NumberFormatException e) {
-				throw new UnavailableException("Unable to number-parse configured 'forced session invalidation period': "+value);
-			}
+			this.forcedSessionInvalidationPeriodMinutes = (Integer) filterInitHandler.init(PARAM_FORCED_SESSION_INVALIDATION_PERIOD_MINUTES,this.forcedSessionInvalidationPeriodMinutes);
 		}
 
-		// Load config: tie session to client IP address flag - OPTIONAL
+		//  tie session to client IP address flag - OPTIONAL
 		{
-			String tieSessionToClientAddressValue = configManager.getConfigurationValue(PARAM_TIE_WEB_SESSION_TO_CLIENT_ADDRESS);
-			if (tieSessionToClientAddressValue == null) tieSessionToClientAddressValue = "false";
-			this.tieSessionToClientAddress = (""+true).equals( tieSessionToClientAddressValue.trim().toLowerCase() );
-			if (this.debug) logLocal("Tie web session to client IP: "+this.tieSessionToClientAddress);
+			this.tieSessionToClientAddress = (Boolean) filterInitHandler.init(PARAM_TIE_WEB_SESSION_TO_CLIENT_ADDRESS,Boolean.FALSE);
 		}
 
-		// Load config: tie session to client HTTP headers - OPTIONAL
+		//  tie session to client HTTP headers - OPTIONAL
 		{
 			String tieSessionToHeaderListValue = configManager.getConfigurationValue(PARAM_TIE_WEB_SESSION_TO_HEADER_LIST);
 			if (tieSessionToHeaderListValue == null) tieSessionToHeaderListValue = "User-Agent"; // "User-Agent,Accept-Encoding"     // "Accept" header not used as default, since this can be empty for example when IE requests favicon.ico) "Accept-Encoding" also not used.... if you wish you can present multiple header names comma-delimitd here
@@ -4033,78 +3402,51 @@ public final class KsWafFilter implements javax.servlet.Filter {
 			} else this.tieSessionToHeaderList = new String[0];
 		}
 
-		// Load config: force entrance through entry-points flag - OPTIONAL
+		//  force entrance through entry-points flag - OPTIONAL
 		{
-			String value = configManager.getConfigurationValue(PARAM_FORCE_ENTRANCE_THROUGH_ENTRY_POINTS);
-			if (value == null) value = "false";
-			this.forceEntranceThroughEntryPoints = (""+true).equals( value.trim().toLowerCase() );
-			if (this.debug) logLocal("Force entrance through entry-points: "+this.forceEntranceThroughEntryPoints);
+			this.forceEntranceThroughEntryPoints = (Boolean) filterInitHandler.init(PARAM_FORCE_ENTRANCE_THROUGH_ENTRY_POINTS,Boolean.FALSE);
 		}
 
-		// Load config: block response headers with CRLF flag - OPTIONAL
+		//  block response headers with CRLF flag - OPTIONAL
 		{
-			String blockResponseHeadersValue = configManager.getConfigurationValue(PARAM_BLOCK_RESPONSE_HEADERS_WITH_CRLF);
-			if (blockResponseHeadersValue == null) blockResponseHeadersValue = ""+true;
-			this.blockResponseHeadersWithCRLF = (""+true).equals( blockResponseHeadersValue.trim().toLowerCase() );
-			if (this.debug) logLocal("Block response headers with CRLF: "+this.blockResponseHeadersWithCRLF);
+			this.blockResponseHeadersWithCRLF = (Boolean) filterInitHandler.init(PARAM_BLOCK_RESPONSE_HEADERS_WITH_CRLF,Boolean.TRUE);
 		}
 
-		// Load config: block future last-modified response header - OPTIONAL
+		//  block future last-modified response header - OPTIONAL
 		{
-			String blockFutureLastModifiedHeadersValue = configManager.getConfigurationValue(PARAM_BLOCK_FUTURE_LAST_MODIFIED_HEADERS);
-			if (blockFutureLastModifiedHeadersValue == null) blockFutureLastModifiedHeadersValue = ""+false;
-			this.blockFutureLastModifiedHeaders = (""+true).equals( blockFutureLastModifiedHeadersValue.trim().toLowerCase() );
-			if (this.debug) logLocal("Block future 'Last-Modified' response headers: "+this.blockFutureLastModifiedHeaders);
+			this.blockFutureLastModifiedHeaders = (Boolean) filterInitHandler.init(PARAM_BLOCK_FUTURE_LAST_MODIFIED_HEADERS,Boolean.FALSE);
 		}
 
-		// Load config: block invalid last-modified response header - OPTIONAL
+		//  block invalid last-modified response header - OPTIONAL
 		{
-			String blockInvalidLastModifiedHeadersValue = configManager.getConfigurationValue(PARAM_BLOCK_INVALID_LAST_MODIFIED_HEADERS);
-			if (blockInvalidLastModifiedHeadersValue == null) blockInvalidLastModifiedHeadersValue = ""+false;
-			this.blockInvalidLastModifiedHeaders = (""+true).equals( blockInvalidLastModifiedHeadersValue.trim().toLowerCase() );
-			if (this.debug) logLocal("Block invalid 'Last-Modified' response headers: "+this.blockInvalidLastModifiedHeaders);
+			this.blockInvalidLastModifiedHeaders = (Boolean) filterInitHandler.init(PARAM_BLOCK_INVALID_LAST_MODIFIED_HEADERS,Boolean.FALSE);
 		}
 
-		// Load config: block requests with unknown referrer - OPTIONAL
+		//  block requests with unknown referrer - OPTIONAL
 		{
-			String blockRequestsWithUnknownReferrerValue = configManager.getConfigurationValue(PARAM_BLOCK_REQUESTS_WITH_UNKNOWN_REFERRER);
-			if (blockRequestsWithUnknownReferrerValue == null) blockRequestsWithUnknownReferrerValue = ""+false;
-			this.blockRequestsWithUnknownReferrer = (""+true).equals( blockRequestsWithUnknownReferrerValue.trim().toLowerCase() );
-			if (this.debug) logLocal("Block requests with unknown referrer: "+this.blockRequestsWithUnknownReferrer);
+			this.blockRequestsWithUnknownReferrer = (Boolean) filterInitHandler.init(PARAM_BLOCK_REQUESTS_WITH_UNKNOWN_REFERRER,Boolean.FALSE);
 		}
-		// Load config: block requests with missing referrer - OPTIONAL
+		//  block requests with missing referrer - OPTIONAL
 		{
-			String blockRequestsWithMissingReferrerValue = configManager.getConfigurationValue(PARAM_BLOCK_REQUESTS_WITH_MISSING_REFERRER);
-			if (blockRequestsWithMissingReferrerValue == null) blockRequestsWithMissingReferrerValue = ""+false;
-			this.blockRequestsWithMissingReferrer = (""+true).equals( blockRequestsWithMissingReferrerValue.trim().toLowerCase() );
-			if (this.debug) logLocal("Block requests with missing referrer: "+this.blockRequestsWithMissingReferrer);
+			this.blockRequestsWithMissingReferrer = (Boolean) filterInitHandler.init(PARAM_BLOCK_REQUESTS_WITH_MISSING_REFERRER,Boolean.FALSE);
 		}
 
-		// Load config: block requests with duplicate headers - OPTIONAL
+		//  block requests with duplicate headers - OPTIONAL
 		{
-			String blockRequestsWithDuplicateHeadersValue = configManager.getConfigurationValue(PARAM_BLOCK_REQUESTS_WITH_DUPLICATE_HEADERS);
-			if (blockRequestsWithDuplicateHeadersValue == null) blockRequestsWithDuplicateHeadersValue = ""+false;
-			this.blockRequestsWithDuplicateHeaders = (""+true).equals( blockRequestsWithDuplicateHeadersValue.trim().toLowerCase() );
-			if (this.debug) logLocal("Block requests with duplicate headers: "+this.blockRequestsWithDuplicateHeaders);
+			this.blockRequestsWithDuplicateHeaders = (Boolean) filterInitHandler.init(PARAM_BLOCK_REQUESTS_WITH_DUPLICATE_HEADERS,Boolean.FALSE);
 		}
 
-		// Load config: block non-local redirects - OPTIONAL
+		//  block non-local redirects - OPTIONAL
 		{
-			String blockNonLocalRedirectsValue = configManager.getConfigurationValue(PARAM_BLOCK_NON_LOCAL_REDIRECTS);
-			if (blockNonLocalRedirectsValue == null) blockNonLocalRedirectsValue = ""+false;
-			this.blockNonLocalRedirects = (""+true).equals( blockNonLocalRedirectsValue.trim().toLowerCase() );
-			if (this.debug) logLocal("Block non-local redirects: "+this.blockNonLocalRedirects);
+			this.blockNonLocalRedirects = (Boolean) filterInitHandler.init(PARAM_BLOCK_NON_LOCAL_REDIRECTS,Boolean.FALSE);
 		}
 
-		// Load config: mask ampersands in link additions - OPTIONAL
+		//  mask ampersands in link additions - OPTIONAL
 		{
-			String value = configManager.getConfigurationValue(PARAM_MASK_AMPERSANDS_IN_LINK_ADDITIONS);
-			if (value == null) value = ""+true;
-			this.maskAmpersandsInLinkAdditions = (""+true).equals( value.trim().toLowerCase() );
-			if (this.debug) logLocal("Mask ampersands in link additions: "+this.maskAmpersandsInLinkAdditions);
+			this.maskAmpersandsInLinkAdditions = (Boolean) filterInitHandler.init(PARAM_MASK_AMPERSANDS_IN_LINK_ADDITIONS,Boolean.TRUE);
 		}
 
-		// Load config: anti-cache response header injection content types - OPTIONAL
+		//  anti-cache response header injection content types - OPTIONAL
 		{
 			String value = configManager.getConfigurationValue(PARAM_ANTI_CACHE_RESPONSE_HEADER_INJECTION_CONTENT_TYPES);
 			if (value == null) value = "text/html,null"; // the word "null" means "match with unset content types"; the most usual case  is though "text/html" only
@@ -4122,7 +3464,7 @@ public final class KsWafFilter implements javax.servlet.Filter {
 			} else this.antiCacheResponseHeaderInjectionContentTypes = new HashSet();
 		}
 
-		// Load config: response protection content types - OPTIONAL
+		//  response protection content types - OPTIONAL
 		{
 			String value = configManager.getConfigurationValue(PARAM_RESPONSE_MODIFICATION_CONTENT_TYPES);
 			if (value == null) value = "text/html,null"; // the word "null" means "match with unset content types"; the most usual case  is though "text/html" only
@@ -4140,7 +3482,7 @@ public final class KsWafFilter implements javax.servlet.Filter {
 			} else this.responseBodyModificationContentTypes = new HashSet();
 		}
 
-		// Load config: 400or404 attack threshold - OPTIONAL
+		//  400or404 attack threshold - OPTIONAL
 		{
 			// general cluster awareness for this feature
 			String value = configManager.getConfigurationValue(PARAM_400_OR_404_ATTACK_THRESHOLD__CLUSTER_AWARE);
@@ -4160,7 +3502,7 @@ public final class KsWafFilter implements javax.servlet.Filter {
 			}
 		}
 
-		// Load config: session creation attack threshold - OPTIONAL
+		//  session creation attack threshold - OPTIONAL
 		{
 			// general cluster awareness for this feature
 			String value = configManager.getConfigurationValue(PARAM_SESSION_CREATION_ATTACK_THRESHOLD__CLUSTER_AWARE);
@@ -4180,45 +3522,29 @@ public final class KsWafFilter implements javax.servlet.Filter {
 			}
 		}
 
-		// Load config: buffer file uploads to disk - OPTIONAL
+		//  buffer file uploads to disk - OPTIONAL
 		{
-			String value = configManager.getConfigurationValue(PARAM_BUFFER_FILE_UPLOADS_TO_DISK);
-			if (value == null) value = "true";
-			this.bufferFileUploadsToDisk = (""+true).equals( value.trim().toLowerCase() );
-			if (this.debug) logLocal("Buffer file uploads to disk: "+this.bufferFileUploadsToDisk);
+			this.bufferFileUploadsToDisk = (Boolean) filterInitHandler.init(PARAM_BUFFER_FILE_UPLOADS_TO_DISK,Boolean.TRUE);
 		}
 
-		// Load config: apply set after session write - OPTIONAL (for session clusters where the session will be replicated to also replicate changes via the container's replication mechnism)
+		//  apply set after session write - OPTIONAL (for session clusters where the session will be replicated to also replicate changes via the container's replication mechnism)
 		{
-			String value = configManager.getConfigurationValue(PARAM_APPLY_SET_AFTER_SESSION_WRITE);
-			if (value == null) value = "false";
-			this.applySetAfterWrite = (""+true).equals( value.trim().toLowerCase() );
-			if (this.debug) logLocal("Apply set after session write: "+this.applySetAfterWrite);
+			this.applySetAfterWrite = (Boolean) filterInitHandler.init(PARAM_APPLY_SET_AFTER_SESSION_WRITE,Boolean.FALSE);
 		}
 
-		// Load config: validate client address format - OPTIONAL
+		//  validate client address format - OPTIONAL
 		{
-			String value = configManager.getConfigurationValue(PARAM_VALIDATE_CLIENT_ADDRESS_FORMAT);
-			if (value == null) value = "false";
-			this.validateClientAddressFormat = (""+true).equals( value.trim().toLowerCase() );
-			if (this.debug) logLocal("Validate client address format: "+this.validateClientAddressFormat);
+			this.validateClientAddressFormat = (Boolean) filterInitHandler.init(PARAM_VALIDATE_CLIENT_ADDRESS_FORMAT,Boolean.FALSE);
 		}
 
-		// Load config: transparent querystring - OPTIONAL
+		//  transparent querystring - OPTIONAL
 		{
-			String value = configManager.getConfigurationValue(PARAM_TRANSPARENT_QUERYSTRING);
-			if (value == null) value = configManager.getConfigurationValue(LEGACY_PARAM_TRANSPARENT_QUERYSTRING); // only for backwards-compatibility to old param name (upper/lowercase S)
-			if (value == null) value = "true";
-			this.transparentQuerystring = (""+true).equals( value.trim().toLowerCase() );
-			if (this.debug) logLocal("Transparent querystring: "+this.transparentQuerystring);
+			this.transparentQuerystring = (Boolean) filterInitHandler.init(PARAM_TRANSPARENT_QUERYSTRING,Boolean.TRUE);
 		}
 
-		// Load config: transparent forwarding - OPTIONAL
+		//  transparent forwarding - OPTIONAL
 		{
-			String value = configManager.getConfigurationValue(PARAM_TRANSPARENT_FORWARDING);
-			if (value == null) value = "true";
-			this.transparentForwarding = (""+true).equals( value.trim().toLowerCase() );
-			if (this.debug) logLocal("Transparent forwarding: "+this.transparentForwarding);
+			this.transparentForwarding = (Boolean) filterInitHandler.init(PARAM_TRANSPARENT_FORWARDING,Boolean.TRUE);
 		}
 
 
@@ -4255,13 +3581,12 @@ public final class KsWafFilter implements javax.servlet.Filter {
 		return configManager;
 	}
 
-
 	private void sendProcessingError(final Throwable t, final HttpServletResponse response) {
 		logLocal("Unable to process filter chain and unable to handle exception: "+t);
 		t.printStackTrace();
 		response.setStatus(HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
 	}
-	// TODO: sendUnavailableMessage und sendUncaughtExceptionResponse in eine parametrisierbare Methode mergen
+
 	private void sendUnavailableMessage(final HttpServletResponse response, final Exception exception) throws IOException {
 		// ID
 		// this is an uncaught exception so use a generic timestamp
@@ -4281,41 +3606,30 @@ public final class KsWafFilter implements javax.servlet.Filter {
 		}
 			if (exceptionMessage != null) exceptionDetails.append(exceptionMessage).append("\n");
 			// extract exception details
-			if (exception != null) {
-				CharArrayWriter sink = null;
-				Throwable currentExceptionInChain = exception;
-				sink = new CharArrayWriter();
-				try (PrintWriter printWriter = new PrintWriter(sink)) {
-					currentExceptionInChain.printStackTrace(printWriter);
-					do {
-						currentExceptionInChain = currentExceptionInChain.getCause();
-						if (currentExceptionInChain != null) {
-							printWriter.println("\nCaused by: " + currentExceptionInChain.getMessage());
-							currentExceptionInChain.printStackTrace(printWriter);
-						}
-					} while (currentExceptionInChain != null);
-				}
-				exceptionDetails.append(sink.toString());
-			}
+		printException(exception, exceptionDetails);
 		if (this.attackHandler != null) this.attackHandler.logWarningRequestMessage("Unable to initialize protection layer:\n\t"+exceptionDetails.toString().replaceAll("\n","\n\t"));
 		try {
-			if (!response.isCommitted()) {
-				response.reset();
-				if (exceptionReplyMessage != null && exceptionReplyMessage.length() > 0) {
-					String message = exceptionReplyMessage;
-					message = message.replaceAll("\\$\\{id\\}", ServerUtils.quoteReplacement(ServerUtils.escapeSpecialCharactersHTML(logReferenceId)));
-					message = message.replaceAll("\\$\\{message\\}", ServerUtils.quoteReplacement(ServerUtils.escapeSpecialCharactersHTML(exceptionMessage)));
-					message = message.replaceAll("\\$\\{details\\}", ServerUtils.quoteReplacement(ServerUtils.escapeSpecialCharactersHTML(exceptionDetails.toString())));
-					response.setContentType("text/html");
-					response.getWriter().write(message);
-					response.flushBuffer();
-				} else response.sendError(exceptionReplyStatusCode);
-			}
+			commitResponse(response, logReferenceId, exceptionMessage, exceptionReplyMessage, exceptionReplyStatusCode, exceptionDetails.toString());
 		} catch (Exception e) {
 			logLocal("Unable to send 'unavailable message' in response", e);
 			response.sendError(exceptionReplyStatusCode);
 		}
 	}
+	private void commitResponse(HttpServletResponse response, String logReferenceId, String exceptionMessage, String exceptionReplyMessage, int exceptionReplyStatusCode, String s) throws IOException {
+		if (!response.isCommitted()) {
+			response.reset();
+			if (exceptionReplyMessage != null && exceptionReplyMessage.length() > 0) {
+				String message = exceptionReplyMessage;
+				message = message.replaceAll("\\$\\{id\\}", ServerUtils.quoteReplacement(ServerUtils.escapeSpecialCharactersHTML(logReferenceId)));
+				message = message.replaceAll("\\$\\{message\\}", ServerUtils.quoteReplacement(ServerUtils.escapeSpecialCharactersHTML(exceptionMessage)));
+				message = message.replaceAll("\\$\\{details\\}", ServerUtils.quoteReplacement(ServerUtils.escapeSpecialCharactersHTML(s)));
+				response.setContentType("text/html");
+				response.getWriter().write(message);
+				response.flushBuffer();
+			} else response.sendError(exceptionReplyStatusCode);
+		}
+	}
+
 	private void sendUncaughtExceptionResponse(final HttpServletResponse response, final Exception exception) throws IOException {
 		// ID
 		// this is an uncaught exception so use a generic timestamp
@@ -4335,43 +3649,33 @@ public final class KsWafFilter implements javax.servlet.Filter {
 		}
 			if (exceptionMessage != null) exceptionDetails.append(exceptionMessage).append("\n");
 			// extract exception details
-			if (exception != null) {
-				CharArrayWriter sink = null;
-				Throwable currentExceptionInChain = exception;
-				sink = new CharArrayWriter();
-				try (PrintWriter printWriter = new PrintWriter(sink)) {
-					currentExceptionInChain.printStackTrace(printWriter);
-					do {
-						currentExceptionInChain = currentExceptionInChain.getCause();
-						if (currentExceptionInChain != null) {
-							printWriter.println("\nCaused by: " + currentExceptionInChain.getMessage());
-							currentExceptionInChain.printStackTrace(printWriter);
-						}
-					} while (currentExceptionInChain != null);
-				}
-				exceptionDetails.append(sink.toString());
-			}
+		printException(exception, exceptionDetails);
 
 		this.attackHandler.logWarningRequestMessage("Uncaught exception blocked:\n\t"+exceptionDetails.toString().replaceAll("\n","\n\t"));
 		try {
-			if (!response.isCommitted()) {
-				response.reset();
-				if (exceptionReplyMessage != null && exceptionReplyMessage.length() > 0) {
-					String message = exceptionReplyMessage;
-					message = message.replaceAll("\\$\\{id\\}", ServerUtils.quoteReplacement(ServerUtils.escapeSpecialCharactersHTML(logReferenceId)));
-					message = message.replaceAll("\\$\\{message\\}", ServerUtils.quoteReplacement(ServerUtils.escapeSpecialCharactersHTML(exceptionMessage)));
-					message = message.replaceAll("\\$\\{details\\}", ServerUtils.quoteReplacement(ServerUtils.escapeSpecialCharactersHTML(exceptionDetails.toString())));
-					response.setContentType("text/html");
-					response.getWriter().write(message);
-					response.flushBuffer();
-				} else response.sendError(exceptionReplyStatusCode);
-			}
+			commitResponse(response, logReferenceId, exceptionMessage, exceptionReplyMessage, exceptionReplyStatusCode, exceptionDetails.toString());
 		} catch (Exception e) {
 			if (!(e instanceof IllegalStateException)/*to avoid logs when getWriter() after already getOutputStream() was called*/) logLocal("Unable to send 'uncaught exception' in response", e);
 			response.sendError(exceptionReplyStatusCode);
 		}
 	}
 
+	private void printException(Exception exception, StringBuilder exceptionDetails) {
+		if (exception != null) {
+			CharArrayWriter sink = null;
+			Throwable currentExceptionInChain = exception;
+			sink = new CharArrayWriter();
+			try (PrintWriter printWriter = new PrintWriter(sink)) {
+				do {
+					currentExceptionInChain = currentExceptionInChain.getCause();
+					if (currentExceptionInChain != null) {
+						printWriter.println("\nCaused by: " + currentExceptionInChain.getMessage());
+					}
+				} while (currentExceptionInChain != null);
+			}
+			exceptionDetails.append(sink.toString());
+		}
+	}
 
 	private void sendDisallowedResponse(final HttpServletResponse response, final Attack attack) throws IOException {
 		if (attack == null) throw new NullPointerException("attack must not be null");
@@ -4398,58 +3702,17 @@ public final class KsWafFilter implements javax.servlet.Filter {
 		}
 		// as attacks are already logged, we don't have to put in extra logging here
 		try {
-			if (!response.isCommitted()) {
-				response.reset();
-				if (attackReplyMessage != null && attackReplyMessage.length() > 0) {
-					String message = attackReplyMessage;
-					message = message.replaceAll("\\$\\{id\\}", ServerUtils.quoteReplacement(ServerUtils.escapeSpecialCharactersHTML(logReferenceId)));
-					message = message.replaceAll("\\$\\{message\\}", ServerUtils.quoteReplacement(ServerUtils.escapeSpecialCharactersHTML("Protection rule or security setting match")));
-					message = message.replaceAll("\\$\\{details\\}", ServerUtils.quoteReplacement(ServerUtils.escapeSpecialCharactersHTML(attackDetails)));
-					response.setContentType("text/html");
-					response.getWriter().write(message);
-					response.flushBuffer();
-				} else response.sendError(attackReplyStatusCode);
-			}
+			commitResponse(response, logReferenceId, "Protection rule or security setting match", attackReplyMessage, attackReplyStatusCode, attackDetails);
 		} catch (Exception e) {
 			if (!(e instanceof IllegalStateException)/*to avoid logs when getWriter() after already getOutputStream() was called*/) logLocal("Unable to send 'disallowed message' in response", e);
 			response.sendError(attackReplyStatusCode);
 		}
 	}
 
-	private void sendErrorMessageResponse(final HttpServletResponse response, final String title, final String message) throws IOException {
-		if (message != null) this.attackHandler.logWarningRequestMessage("Sening error message response:\n\t"+message.replaceAll("\n","\n\t"));
-		try {
-			if (!response.isCommitted()) {
-				response.reset();
-				if (message != null && message.trim().length() > 0) {
-					response.setContentType("text/html");
-					final PrintWriter out = response.getWriter();
-					out.write("<?xml version=\"1.0\" encoding=\"ISO-8859-1\" ?>");
-					out.write("<html xmlns=\"http://www.w3.org/1999/xhtml\"><head>");
-					out.write("<meta content=\"text/html; charset=ISO-8859-1\" http-equiv=\"Content-Type\" /><meta content=\"0\" http-equiv=\"Expires\" />");
-					out.write("<meta content=\"no-cache\" http-equiv=\"Pragma\" /><meta content=\"no-cache, no-store, must-revalidate\" http-equiv=\"Cache-control\" />");
-					out.write("<title>"+ ServerUtils.escapeSpecialCharactersHTML(title) +"</title></head>");
-					out.write("<body bgproperties=\"FIXED\" style=\"font-family: Arial, Helvetica, sans-serif, Verdana, Geneva;\">");
-					out.write("<span style=\"background-color: #ffffbb; border: 1px dotted #999999; padding: 2px 4px 2px 12px; width: 90%; margin-top: 7px; margin-left: 5px; display:block; color: black;\">");
-					out.write("<table style=\"border: 1px; border-width: 0px; cell-spacing: 0px; cell-padding: 0px; margin: 0px 0px 0px 0px;\">");
-					out.write("<tr><td style=\"horizontal-align: left; vertical-align: middle; padding-bottom: 8px;\">");
-					out.write("<br/><h2 style=\"margin:0; padding:0; font-size: 0.9em;\">"+ ServerUtils.escapeSpecialCharactersHTML(title) +"</h2></td></tr>");
-					out.write("<tr><td style=\"horizontal-align: left; font-size: 0.8em;\"><ul><li>");
-					out.write( ServerUtils.escapeSpecialCharactersHTML(message) );
-					out.write("<p/></li></ul></td></tr></table></span></body></html>");
-					response.flushBuffer();
-				} else response.sendError(500, message);
-			}
-		} catch (Exception e) {
-			if (!(e instanceof IllegalStateException)/*to avoid logs when getWriter() after already getOutputStream() was called*/) logLocal("Unable to send 'error message' in response", e);
-			response.sendError(500, message);
-		}
-	}
-
-
 	private void logLocal(final String msg) {
 		logLocal(msg, null);
 	}
+
 	private void logLocal(final String msg, final Exception e) {
 		if (e != null) {
 			if (USE_WEB_SERVER_LOG && filterConfig != null && filterConfig.getServletContext() != null) filterConfig.getServletContext().log(msg, e);
@@ -4476,10 +3739,6 @@ public final class KsWafFilter implements javax.servlet.Filter {
 			}
 		}
 	}
-
-
-
-
 	private void removeTemporarilyInjectedParametersFromRequest(final RequestWrapper request, final String cryptoDetectionString) {
 		if (request == null) return;
 		// remove the encrpyted param
@@ -4494,6 +3753,7 @@ public final class KsWafFilter implements javax.servlet.Filter {
 			request.removeParameter((String) ServerUtils.getAttributeIncludingInternal(session,SESSION_PARAMETER_AND_FORM_PROTECTION_RANDOM_TOKEN_KEY_KEY));
 		} catch (IllegalStateException ignored) {} // = session already invalidated
 	}
+
 	private void removeTemporarilyInjectedParametersFromMap(final Map/*<String,String[]>*/ parameterMap, final HttpSession session, final String cryptoDetectionString) {
 		if (parameterMap == null) return;
 		// remove the encrpyted param
@@ -4519,28 +3779,12 @@ public final class KsWafFilter implements javax.servlet.Filter {
 		}
 	}
 
-
-
-
-
-
-
-
-
-	//1.5@Override
 	public String toString() {
 		return Version.tagLine();
 	}
 
-
-
-
-
-
-
-
-
 	private static final class AllowedFlagWithMessage {
+
 		private final boolean allowed;
 		private Attack attack;
 		public AllowedFlagWithMessage(final boolean allowed) {
@@ -4550,15 +3794,82 @@ public final class KsWafFilter implements javax.servlet.Filter {
 			this(allowed);
 			this.attack = attack;
 		}
-
 		public boolean isAllowed() {
 			return this.allowed;
 		}
+
 		public Attack getAttack() {
 			return this.attack;
 		}
 
 	}
+
+	/**
+	 * The filter configuration object we are associated with.
+	 * If this value is null, this filter instance is not currently
+	 * configured.
+	 */
+	private Class ruleFileLoaderClass, productionModeCheckerClass, clientIpDeterminatorClass, multipartRequestParserClass;
+	private AttackHandler attackHandler;
+	private String developmentAttackReplyMessage, productionAttackReplyMessage, developmentConfigurationMissingReplyMessage, productionConfigurationMissingReplyMessage,
+			developmentExceptionReplyMessage, productionExceptionReplyMessage, redirectWelcomePage = "", sessionTimeoutRedirectPage = "", requestCharacterEncoding = "UTF-8";
+	private Integer developmentAttackReplyStatusCode=200, productionAttackReplyStatusCode=200, developmentConfigurationMissingReplyStatusCode=503, productionConfigurationMissingReplyStatusCode=503,
+			developmentExceptionReplyStatusCode=503, productionExceptionReplyStatusCode=503, forcedSessionInvalidationPeriodMinutes = 900, housekeepingIntervalMinutes = 15, blockPeriodMinutes = 20;
+	private Long ruleFileReloadingIntervalMillis = Long.valueOf(0), nextRuleReloadingTime;
+	public int configReloadingIntervalMillis = 0;
+	public Long nextConfigReloadingTime;
+	private Integer resetPeriodMinutesAttack = 10, resetPeriodMinutesSessionCreation = 5, resetPeriodMinutesBadResponseCode = 2, resetPeriodMinutesRedirectThreshold = 2;
+	private Boolean debug, showTimings, catchAll = true, forceEntranceThroughEntryPoints,
+			tieSessionToClientAddress, blockResponseHeadersWithCRLF, blockFutureLastModifiedHeaders,
+			blockInvalidLastModifiedHeaders, blockRequestsWithUnknownReferrer,blockRequestsWithMissingReferrer,
+			blockRequestsWithDuplicateHeaders, blockNonLocalRedirects, blockInvalidEncodedQueryString,
+			useFullPathForResourceToBeAccessedProtection, additionalFullResourceRemoval, additionalMediumResourceRemoval,
+			maskAmpersandsInLinkAdditions;
+	private Boolean hiddenFormFieldProtection, selectboxProtection, checkboxProtection, radiobuttonProtection, selectboxValueMasking, checkboxValueMasking, radiobuttonValueMasking, reuseSessionContent, parseMultipartForms, hideInternalSessionAttributes,imageMapParameterExclude,
+			bufferFileUploadsToDisk, extraSessionTimeoutHandling;
+	private String[] tieSessionToHeaderList;
+	private Set antiCacheResponseHeaderInjectionContentTypes, responseBodyModificationContentTypes;
+	private HttpStatusCodeTracker httpStatusCodeCounter;
+	private SessionCreationTracker sessionCreationCounter;
+	private DenialOfServiceLimitTracker denialOfServiceLimitCounter;
+	private ClientIpDeterminator clientIpDeterminator;
+	private MultipartRequestParser multipartRequestParser;
+	private String applicationName = "DEFAULT", learningModeAggregationDirectory = "", clusterInitialContextFactory ="", clusterJmsProviderUrl="", clusterJmsConnectionFactory = "", clusterJmsTopic = "";
+	private Boolean isProductionMode, logSessionValuesOnAttack, invalidateSessionOnAttack, logVerboseForDevelopmentMode, extraEncryptedValueHashProtection, appendQuestionmarkOrAmpersandToLinks, appendSessionIdToLinks,  jmsUsed = false, flushResponse;
+	private Boolean presentMultipartFormParametersAsRegularParametersToApplication, blockMultipartRequestsForNonMultipartForms = false, pdfXssProtection, applySetAfterWrite;
+	private Integer blockRepeatedRedirectsThreshold = 150, clusterBroadcastPeriod = 60;
+	private Pattern removeSensitiveDataRequestParamNamePattern = Pattern.compile("\"(?i)p(?:ass)?(?:wor[dt]|phrase|wd)|kennwort\""), removeSensitiveDataValuePattern;
+	private String honeylinkPrefix = "", honeylinkSuffix = "";
+	private Short honeylinkMaxPerPage = 0;
+	private Boolean randomizeHoneylinksOnEveryRequest;
+
+	private final Set allowedRequestMimeTypesLowerCased = new HashSet();
+
+	private boolean isHavingEnabledQueryStringCheckingRules = false, isHavingEnabledRequestParameterCheckingRules = false, isHavingEnabledHeaderCheckingRules = false, isHavingEnabledCookieCheckingRules = false;
+	private boolean validateClientAddressFormat = false;
+
+	private boolean transparentQuerystring = true, transparentForwarding = true;
+
+
+	private WhitelistRequestDefinitionContainer whiteListDefinitions; private boolean treatNonMatchingServletPathAsMatchForWhitelistRules;
+	private BadRequestDefinitionContainer badRequestDefinitions;
+	private DenialOfServiceLimitDefinitionContainer denialOfServiceLimitDefinitions;
+	private EntryPointDefinitionContainer entryPointDefinitions;
+	private OptimizationHintDefinitionContainer optimizationHintDefinitions;
+	private RenewSessionAndTokenPointDefinitionContainer renewSessionPointDefinitions;
+	private IncomingProtectionExcludeDefinitionContainer incomingProtectionExcludeDefinitions;
+
+	private ResponseModificationDefinitionContainer responseModificationDefinitions;
+	private TotalExcludeDefinitionContainer totalExcludeDefinitions;
+	private ContentModificationExcludeDefinitionContainer contentModificationExcludeDefinitions;
+	private SizeLimitDefinitionContainer sizeLimitDefinitions;
+	private MultipartSizeLimitDefinitionContainer multipartSizeLimitDefinitions;
+	private DecodingPermutationDefinitionContainer decodingPermutationDefinitions;
+
+	private FormFieldMaskingExcludeDefinitionContainer formFieldMaskingExcludeDefinitions;
+	private boolean restartCompletelyOnNextRequest = true; // initially true to load config on init()
+
+	private boolean reloadRulesOnNextRequest = false; // initially false (handled during config loading on init automatically)
 
 
 	public static final boolean REMOVE_CONTENT_LENGTH_FOR_MODIFIABLE_RESPONSES = true;
@@ -4568,19 +3879,6 @@ public final class KsWafFilter implements javax.servlet.Filter {
 
 
 	public static final Pattern PATTERN_VALID_CLIENT_ADDRESS = Pattern.compile("[0-9]{1,3}\\.[0-9]{1,3}\\.[0-9]{1,3}\\.[0-9]{1,3}|((([0-9A-Fa-f]{1,4}:){7}[0-9A-Fa-f]{1,4})|(([0-9A-Fa-f]{1,4}:){6}:[0-9A-Fa-f]{1,4})|(([0-9A-Fa-f]{1,4}:){5}:([0-9A-Fa-f]{1,4}:)?[0-9A-Fa-f]{1,4})|(([0-9A-Fa-f]{1,4}:){4}:([0-9A-Fa-f]{1,4}:){0,2}[0-9A-Fa-f]{1,4})|(([0-9A-Fa-f]{1,4}:){3}:([0-9A-Fa-f]{1,4}:){0,3}[0-9A-Fa-f]{1,4})|(([0-9A-Fa-f]{1,4}:){2}:([0-9A-Fa-f]{1,4}:){0,4}[0-9A-Fa-f]{1,4})|(([0-9A-Fa-f]{1,4}:){6}((\\b((25[0-5])|(1\\d{2})|(2[0-4]\\d)|(\\d{1,2}))\\b)\\.){3}(\\b((25[0-5])|(1\\d{2})|(2[0-4]\\d)|(\\d{1,2}))\\b))|(([0-9A-Fa-f]{1,4}:){0,5}:((\\b((25[0-5])|(1\\d{2})|(2[0-4]\\d)|(\\d{1,2}))\\b)\\.){3}(\\b((25[0-5])|(1\\d{2})|(2[0-4]\\d)|(\\d{1,2}))\\b))|(::([0-9A-Fa-f]{1,4}:){0,5}((\\b((25[0-5])|(1\\d{2})|(2[0-4]\\d)|(\\d{1,2}))\\b)\\.){3}(\\b((25[0-5])|(1\\d{2})|(2[0-4]\\d)|(\\d{1,2}))\\b))|([0-9A-Fa-f]{1,4}::([0-9A-Fa-f]{1,4}:){0,5}[0-9A-Fa-f]{1,4})|(::([0-9A-Fa-f]{1,4}:){0,6}[0-9A-Fa-f]{1,4})|(([0-9A-Fa-f]{1,4}:){1,7}:))(%[0-9A-Fa-f]{1,4})?");
-
-
-
-	static final File TEMP_DIRECTORY = null;
-
-
-
-	static final int TRIE_MATCHING_THRSHOLD = 60;
-
-
-
-
-
 
 	private static final boolean USE_WEB_SERVER_LOG = true;
 
@@ -4592,10 +3890,6 @@ public final class KsWafFilter implements javax.servlet.Filter {
 
 
 	public static int customerIdentifier;
-
-
-
-
 
 }
 

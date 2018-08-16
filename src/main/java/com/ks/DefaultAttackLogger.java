@@ -14,10 +14,9 @@ import java.io.File;
 import java.util.logging.*;
 
 public final class DefaultAttackLogger implements AttackLogger {
-	public static final String PARAM_DIRECTORY = "DefaultAttackLoggerDirectory";
-	public static final String LEGACY_PARAM_DIRECTORY = "AttackLogDirectory";
-	public static final String PARAM_COUNT = "DefaultAttackLoggerPreAndPostCount";
-	public static final String LEGACY_PARAM_COUNT = "PreAndPostAttackLogCount";
+
+	public static final String PARAM_DIRECTORY = "AttackLogDirectory";
+	public static final String PARAM_COUNT = "PreAndPostAttackLogCount";
 
 
 	private String directory = "";
@@ -26,8 +25,8 @@ public final class DefaultAttackLogger implements AttackLogger {
 
 	private Logger securityLogger;
 	private Handler handlerForSecurityLogging;
-	private MemoryHandler memoryHandlerPointerForSecurityLogging; // pointer to concrete memory-handler (also set as more abstract this.handler when a memory-handler is used)
-	private FileHandler fileHandlerPointerForSecurityLogging; // pointer to concrete file-handler (also set as more abstract this.handler when no memory-handler is used)
+	private MemoryHandler memoryHandlerPointerForSecurityLogging; // pointer to concrete memory-handler
+	private FileHandler fileHandlerPointerForSecurityLogging; // pointer to concrete file-handler
 	// number of requests to log *after* an attack has happended
 	private volatile int currentPostAttackLogCounter;
 
@@ -37,21 +36,18 @@ public final class DefaultAttackLogger implements AttackLogger {
 		final ConfigurationManager configManager = ConfigurationUtils.createConfigurationManager(filterConfig);
 		{
 			String value = ConfigurationUtils.extractMandatoryConfigValue(configManager,PARAM_DIRECTORY);
-			if (value == null) value = DEFAULT_LOGGER_DIRECTORY;
-			this.directory = value.trim();
+			this.directory = StringUtils.isEmpty(value)? DEFAULT_LOGGER_DIRECTORY: value.trim();
 		}
 		{
 			String value = configManager.getConfigurationValue(PARAM_COUNT);
-			if (value == null) value = "0";
 			try {
-				this.prePostCount = Integer.parseInt(value.trim());
+				this.prePostCount = StringUtils.isEmpty(value)? 0 : Integer.parseInt(value.trim());
 				if (this.prePostCount < 0) throw new FilterConfigurationException("Configured 'pre/post-attack log size' must not be negative: "+value);
 			} catch(NumberFormatException e) {
 				throw new FilterConfigurationException("Unable to number-parse configured 'pre/post-attack log size': "+value);
 			}
 		}
 	}
-
 
 
 	@Override
@@ -62,11 +58,10 @@ public final class DefaultAttackLogger implements AttackLogger {
 		}
 		// create file logging
 		final File file = new File(directory);
-		file.mkdirs();
 		if (!file.exists()) file.mkdirs(); System.out.println("KS-WAF log directory was created: "+file.getAbsolutePath());
 		if (!file.exists()) System.out.println("KS-WAF log directory doesn't exist: "+file.getAbsolutePath());
 		final String applicationAdjusted;
-		if (application == null || application.trim().length() == 0) {
+		if (StringUtils.isEmpty(application)) {
 			applicationAdjusted = "";
 			System.out.println("KS-WAF logs attacks for this application to "+file.getAbsolutePath());
 		} else {

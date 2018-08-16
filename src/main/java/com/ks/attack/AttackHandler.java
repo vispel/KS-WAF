@@ -198,8 +198,14 @@ public final class AttackHandler {
 	public void handleRegularRequest(final HttpServletRequest request, final String ip) {
 		if (this.attackLogger != null && (this.attackLogger.getPrePostCount() > 0 || (this.logVerboseForDevelopmentMode && !this.isProductionMode))) {
 			try {
-				final StringBuilder logMessage = new StringBuilder("Regular request (pre/post-attack logging): ").append(Version.versionNumber()).append(" ").append("[\n");
-				logMessage.append( RequestUtils.extractSecurityRelevantRequestContent(request,ip,false,this.removeSensitiveDataRequestParamNamePattern,this.removeSensitiveDataRequestParamNameAndValueUrlPattern,this.removeSensitiveDataValuePattern,logClientUserData) );
+				final StringBuilder logMessage = new StringBuilder("Regular request (pre/post-attack logging): ")
+						.append(Version.versionNumber()).append(" ").append("[\n");
+				logMessage.append( RequestUtils.extractSecurityRelevantRequestContent(request,ip,
+						false,
+						this.removeSensitiveDataRequestParamNamePattern,
+						this.removeSensitiveDataRequestParamNameAndValueUrlPattern,
+						this.removeSensitiveDataValuePattern,
+						logClientUserData) );
 				logMessage.append("]");
 				this.attackLogger.log(false, logMessage.toString());
 			} catch (Exception e) {
@@ -216,11 +222,19 @@ public final class AttackHandler {
 			blocked = trackBlocking(ip);
 		}
 
-
 		// log attack
 		final String logReferenceId = IdGeneratorUtils.createId();
-		final StringBuilder logMessage = new StringBuilder("Reference ").append(logReferenceId).append(" (production mode is ").append(this.isProductionMode?"enabled): ":"disabled): ").append(Version.versionNumber()).append("\n").append(message).append(" [\n");
-		logMessage.append( RequestUtils.extractSecurityRelevantRequestContent(request,ip,this.logSessionValuesOnAttack,this.removeSensitiveDataRequestParamNamePattern,this.removeSensitiveDataRequestParamNameAndValueUrlPattern,this.removeSensitiveDataValuePattern,this.logClientUserData) );
+		final StringBuilder logMessage = new StringBuilder("Reference ")
+				.append(logReferenceId).append(" (production mode is ")
+				.append(this.isProductionMode ? "enabled): " : "disabled): ")
+				.append(Version.versionNumber())
+				.append("\n").append(message).append(" [\n");
+		logMessage.append(RequestUtils.extractSecurityRelevantRequestContent(request, ip,
+				this.logSessionValuesOnAttack,
+				this.removeSensitiveDataRequestParamNamePattern,
+				this.removeSensitiveDataRequestParamNameAndValueUrlPattern,
+				this.removeSensitiveDataValuePattern,
+				this.logClientUserData));
 		logMessage.append("]");
 
 		// invalidate session on attack ?
@@ -232,7 +246,8 @@ public final class AttackHandler {
 					logMessage.append(" ==> emergency action: session invalidated");
 				}
 			} catch (Exception e) {
-				logMessage.append(" ==> emergency action failed: unable to invalidate session: "+e.getMessage());
+				logMessage.append(" ==> emergency action failed: unable to invalidate session: ")
+						.append(e.getMessage());
 			}
 		}
 
@@ -275,7 +290,6 @@ public final class AttackHandler {
 				counter = new IncrementingCounter(this.resetPeriodMillisAttack);
 				this.attackCounter.put(ip, counter);
 			} else counter.increment(); // = overaged will automatically be reset and reused (i.e. starting again at 1)
-//            if (DEBUG) System.out.println("Current attack status map: "+this.attackCounter);
 			if (counter.getCounter() >= this.blockAttackingClientsThreshold) {
 				this.attackCounter.remove(ip);
 				blocked = true;
@@ -294,7 +308,6 @@ public final class AttackHandler {
 				counter = new IncrementingCounter(this.resetPeriodMillisRedirectThreshold);
 				this.redirectCounter.put(ip, counter);
 			} else counter.increment(); // = overaged will automatically be reset and reused (i.e. starting again at 1)
-//            if (DEBUG) System.out.println("Current redirect status map: "+this.redirectCounter);
 			if (counter.getCounter() >= this.blockRepeatedRedirectsThreshold) {
 				this.redirectCounter.remove(ip);
 				return true;
@@ -326,8 +339,8 @@ public final class AttackHandler {
 							final String name = (String) names.nextElement();
 							final String[] values = requestAsSeenByTheApplication.getParameterValues(name);
 							if (values != null) {
-								for (int i=0 ; i<values.length; i++) {
-									RequestUtils.appendValueToMessage(logMessage, "requestParam: "+ServerUtils.urlEncode(name), ServerUtils.urlEncode(values[i]));
+								for (String value : values) {
+									RequestUtils.appendValueToMessage(logMessage, "requestParam: " + ServerUtils.urlEncode(name), ServerUtils.urlEncode(value));
 								}
 							}
 						}
@@ -382,7 +395,7 @@ public final class AttackHandler {
 	}
 
 
-	public static final String getAbsolutePathLoggingSafe(final File file) {
+	public static String getAbsolutePathLoggingSafe(final File file) {
 		String result = file.getAbsolutePath();
 		// escape for FileHandler special characters (see docs of java.util.logging.FileHandler)
 		result = result.replaceAll("\\\\","/");
